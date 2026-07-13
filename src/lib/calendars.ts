@@ -25,3 +25,24 @@ export function createCalendar(input: {
     feedUrl: `${getEnv().BASE_URL}/feed/${feedToken}.ics`,
   }
 }
+
+// feed_token으로 캘린더를 조회 (이슈 #7). 피드는 무인증 — 토큰이 곧 접근권(PLAN §7).
+// 무효/폐기 토큰은 정상 흐름이므로 throw 아닌 undefined 반환 → 라우트가 404로 변환.
+export function getCalendarByFeedToken(
+  token: string,
+): { userId: string; databaseId: string; mapping: CalendarMapping } | undefined {
+  const row = db
+    .prepare(
+      'SELECT user_id AS userId, notion_database_id AS databaseId, mapping FROM calendar WHERE feed_token = ?',
+    )
+    .get(token) as { userId: string; databaseId: string; mapping: string } | undefined
+  if (!row) return undefined
+
+  // ponytail: mapping은 쓰기 시 validateMappingAgainstProperties로 검증된 자체 데이터 — 재검증 생략.
+  // JSON.parse 실패(수기 DB 변조)는 throw → 라우트가 502로 흡수.
+  return {
+    userId: row.userId,
+    databaseId: row.databaseId,
+    mapping: JSON.parse(row.mapping) as CalendarMapping,
+  }
+}
