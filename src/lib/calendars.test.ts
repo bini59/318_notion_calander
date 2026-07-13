@@ -57,3 +57,30 @@ describe('createCalendar', () => {
     ).toThrow()
   })
 })
+
+describe('getCalendarByFeedToken (feed auth boundary)', () => {
+  it('round-trips a valid token → {userId, databaseId, mapping}', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-feed' })
+    const { feedToken } = calendars.createCalendar({ userId, databaseId: 'db-feed', mapping })
+
+    expect(calendars.getCalendarByFeedToken(feedToken)).toEqual({
+      userId,
+      databaseId: 'db-feed',
+      mapping,
+    })
+  })
+
+  it('returns undefined for an unknown token (404 contract, not throw)', () => {
+    expect(calendars.getCalendarByFeedToken('does-not-exist')).toBeUndefined()
+  })
+
+  it('throws on corrupted mapping JSON (502 contract — DB tampering)', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-bad' })
+    db.prepare(
+      `INSERT INTO calendar (id, user_id, notion_database_id, feed_token, mapping)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run('cal-bad', userId, 'db-bad', 'tok-bad', '{not valid json')
+
+    expect(() => calendars.getCalendarByFeedToken('tok-bad')).toThrow()
+  })
+})
