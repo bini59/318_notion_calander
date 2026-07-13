@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { encrypt } from './crypto'
+import { decrypt, encrypt } from './crypto'
 import { db } from './db'
 
 // access_token은 반드시 encrypt() 거쳐 저장 (PLAN §7, 평문 저장 금지).
@@ -20,4 +20,15 @@ export function upsertUserByWorkspace(input: {
     )
     .pluck()
     .get(randomUUID(), encrypted, input.workspaceId) as string
+}
+
+// 세션에서 얻은 user id로 Notion access_token을 복호화해 돌려준다.
+// 없는 user id(만료된/위조된 세션)는 호출부에서 401로 변환하도록 throw.
+export function getDecryptedTokenByUserId(userId: string): string {
+  const token = db
+    .prepare('SELECT notion_access_token FROM user WHERE id = ?')
+    .pluck()
+    .get(userId) as string | undefined
+  if (!token) throw new Error('User not found')
+  return decrypt(token)
 }
