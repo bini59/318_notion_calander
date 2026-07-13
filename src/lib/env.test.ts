@@ -22,6 +22,10 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...full, BASE_URL: '' })).toThrow(/BASE_URL/)
   })
 
+  it('rejects a malformed BASE_URL', () => {
+    expect(() => validateEnv({ ...full, BASE_URL: 'not a url' })).toThrow(/BASE_URL/)
+  })
+
   it('names every missing variable at once', () => {
     expect(() => validateEnv({})).toThrow(
       /NOTION_CLIENT_ID.*NOTION_CLIENT_SECRET.*TOKEN_ENC_KEY.*BASE_URL.*DATABASE_URL/,
