@@ -1,0 +1,37 @@
+# claude/agent tooling (local)
+.claude/
+CLAUDE.md
+CONTEXT.md
+graphify-out/
+tmp/
+
+# dependencies
+/node_modules
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+
+# env files — .env.example is the committed template
+.env*
+!.env.example
+
+# sqlite data
+/data/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
