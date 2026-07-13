@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getEnv } from '@/lib/env'
 import { STATE_COOKIE, exchangeCodeForToken } from '@/lib/notion-oauth'
+import { setSessionCookie } from '@/lib/session'
 import { upsertUserByWorkspace } from '@/lib/users'
 
 export const dynamic = 'force-dynamic'
@@ -27,16 +28,19 @@ export async function GET(req: NextRequest) {
   }
 
   // (3) code→token 교환 + 암호화 저장. 실패는 사용자향 에러로 변환(상세 미노출).
+  let userId: string
   try {
     const { accessToken, workspaceId } = await exchangeCodeForToken(code)
-    upsertUserByWorkspace({ accessToken, workspaceId })
+    userId = upsertUserByWorkspace({ accessToken, workspaceId })
   } catch (error) {
     console.error('Notion OAuth callback failed:', error)
     return new NextResponse('Notion connection failed', { status: 502 })
   }
 
-  // (4) 성공 → state 쿠키 삭제 후 완료 리다이렉트
-  const res = NextResponse.redirect(`${base}/?notion=connected`)
+  // (4) 성공 → user id를 세션 쿠키로 봉인(이후 라우트가 이 사용자로 Notion 조회),
+  //     state 쿠키 삭제 후 DB 선택 화면으로 리다이렉트.
+  const res = NextResponse.redirect(`${base}/setup`)
   res.cookies.delete(STATE_COOKIE)
+  setSessionCookie(res, userId)
   return res
 }

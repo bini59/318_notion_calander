@@ -64,15 +64,23 @@ describe('GET /api/auth/notion/callback', () => {
     expect(body).not.toMatch(/secret_ntn_leak|401|boom/)
   })
 
-  it('redirects to ?notion=connected and clears the state cookie on success', async () => {
+  it('redirects to /setup, clears state, and sets a session cookie on success', async () => {
     exchangeCodeForToken.mockResolvedValue({ accessToken: 'tok', workspaceId: 'ws' })
     upsertUserByWorkspace.mockReturnValue('user-1')
     const res = await GET(req('?code=the-code&state=s', 's'))
 
-    expect(res.headers.get('location')).toBe('http://localhost:3000/?notion=connected')
+    expect(res.headers.get('location')).toBe('http://localhost:3000/setup')
     expect(exchangeCodeForToken).toHaveBeenCalledWith('the-code')
     expect(upsertUserByWorkspace).toHaveBeenCalledWith({ accessToken: 'tok', workspaceId: 'ws' })
-    // 삭제 = 빈 값 + 과거 만료(Next.js는 Expires=1970 또는 Max-Age=0로 지운다)
-    expect(res.headers.get('set-cookie')).toMatch(new RegExp(`${STATE_COOKIE}=;.*(Max-Age=0|Expires=Thu, 01 Jan 1970)`, 'i'))
+
+    const setCookie = res.headers.get('set-cookie') ?? ''
+    // state 삭제 = 빈 값 + 과거 만료(Next.js는 Expires=1970 또는 Max-Age=0로 지운다)
+    expect(setCookie).toMatch(
+      new RegExp(`${STATE_COOKIE}=;.*(Max-Age=0|Expires=Thu, 01 Jan 1970)`, 'i'),
+    )
+    // 세션 쿠키는 봉인된(평문 user id 아닌) 값 + httpOnly
+    expect(setCookie).toMatch(/session=/)
+    expect(setCookie).not.toMatch(/session=user-1[;,]/)
+    expect(setCookie).toMatch(/HttpOnly/i)
   })
 })

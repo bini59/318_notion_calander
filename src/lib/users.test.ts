@@ -49,3 +49,14 @@ describe('upsertUserByWorkspace', () => {
     expect(crypto.decrypt(token)).toBe('tok-2')
   })
 })
+
+describe('getDecryptedTokenByUserId', () => {
+  it('returns the plaintext token for an existing user', () => {
+    const id = users.upsertUserByWorkspace({ accessToken: 'secret_ntn_x', workspaceId: 'ws-tok' })
+    expect(users.getDecryptedTokenByUserId(id)).toBe('secret_ntn_x')
+  })
+
+  it('throws for an unknown user id (stale/forged session)', () => {
+    expect(() => users.getDecryptedTokenByUserId('does-not-exist')).toThrow()
+  })
+})
