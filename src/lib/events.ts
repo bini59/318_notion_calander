@@ -59,7 +59,13 @@ function isAllDay(start: string): boolean {
 }
 
 // 순수 매퍼: 매핑된 속성만 추출. mapping.start가 비어있는 페이지는 스킵(이슈 완료 조건).
-export function pagesToEvents(pages: NotionPage[], mapping: CalendarMapping): CalendarEvent[] {
+// bodyTextByPage(#17): description 소스='body'일 때 route가 미리 만든 page.id→본문 map. 매퍼는
+// 조회만 한다 — HTTP는 route 몫이라 순수성 유지(테스트도 HTTP 목 불필요). property 소스면 미사용.
+export function pagesToEvents(
+  pages: NotionPage[],
+  mapping: CalendarMapping,
+  bodyTextByPage?: Map<string, string>,
+): CalendarEvent[] {
   const events: CalendarEvent[] = []
 
   for (const page of pages) {
@@ -73,15 +79,21 @@ export function pagesToEvents(pages: NotionPage[], mapping: CalendarMapping): Ca
       ? extractDate(props[mapping.end])?.start
       : startDate.end
 
+    // description: 소스='body'면 주입된 map에서 조회(map 미스 → undefined), 아니면 매핑 property에서 추출.
+    const description =
+      mapping.descriptionSource === 'body'
+        ? bodyTextByPage?.get(page.id)
+        : mapping.description
+          ? extractText(props[mapping.description])
+          : undefined
+
     events.push({
       uid: page.id,
       title: extractPlainText(props[mapping.title]) ?? '',
       start,
       ...(end ? { end } : {}),
       allDay: isAllDay(start),
-      ...(mapping.description
-        ? { description: extractText(props[mapping.description]) }
-        : {}),
+      ...(mapping.descriptionSource === 'body' || mapping.description ? { description } : {}),
       ...(mapping.location ? { location: extractText(props[mapping.location]) } : {}),
       ...(page.url ? { url: page.url } : {}),
     })

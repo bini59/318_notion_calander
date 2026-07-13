@@ -116,6 +116,19 @@ describe('mappingSchema', () => {
     })
     expect(parsed.success).toBe(false)
   })
+
+  it("accepts descriptionSource 'property'/'body' and its absence (#17 하위호환)", () => {
+    for (const descriptionSource of ['property', 'body'] as const) {
+      expect(mappingSchema.safeParse({ title: 'Name', start: 'When', descriptionSource }).success).toBe(true)
+    }
+    // 부재 = 기존 저장 mapping (falsy → 'property'로 해석).
+    expect(mappingSchema.safeParse({ title: 'Name', start: 'When' }).success).toBe(true)
+  })
+
+  it('rejects an unknown descriptionSource value', () => {
+    const parsed = mappingSchema.safeParse({ title: 'Name', start: 'When', descriptionSource: 'summary' })
+    expect(parsed.success).toBe(false)
+  })
 })
 
 describe('autoDetectMapping', () => {
@@ -207,6 +220,30 @@ describe('validateMappingAgainstProperties', () => {
         start: 'When',
         filters: [{ type: 'select', property: 'Ghost', condition: 'equals', value: 'x' }],
       },
+      props,
+    )
+    expect(reason).toMatch(/존재하지 않/)
+  })
+
+  it("skips description property existence check when descriptionSource is 'body' (#17)", () => {
+    // 'body' 소스면 description은 property가 아니라 페이지 본문 → 존재하지 않는 이름이어도(또는 없어도) 통과.
+    expect(
+      validateMappingAgainstProperties(
+        { title: 'Name', start: 'When', description: 'Ghost', descriptionSource: 'body' },
+        props,
+      ),
+    ).toBeNull()
+    expect(
+      validateMappingAgainstProperties(
+        { title: 'Name', start: 'When', descriptionSource: 'body' },
+        props,
+      ),
+    ).toBeNull()
+  })
+
+  it("still validates description existence for the default 'property' source (#17)", () => {
+    const reason = validateMappingAgainstProperties(
+      { title: 'Name', start: 'When', description: 'Ghost', descriptionSource: 'property' },
       props,
     )
     expect(reason).toMatch(/존재하지 않/)

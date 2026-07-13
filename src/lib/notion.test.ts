@@ -226,6 +226,51 @@ describe('queryRelationPages', () => {
   })
 })
 
+describe('fetchPageBodyText (#17)', () => {
+  it('extracts rich_text across block types and joins non-empty blocks with newlines', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({
+        results: [
+          { type: 'heading_1', heading_1: { rich_text: [{ plain_text: 'Title' }] } },
+          { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'line ' }, { plain_text: 'one' }] } },
+          { type: 'to_do', to_do: { rich_text: [{ plain_text: 'task' }] } },
+          { type: 'callout', callout: { rich_text: [{ plain_text: 'note' }] } },
+        ],
+      }),
+    )
+    const text = await notion.fetchPageBodyText('tok', 'pg1')
+    expect(text).toBe('Title\nline one\ntask\nnote')
+  })
+
+  it('requests a single page with the block-count cap (no pagination)', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ results: [] }))
+    await notion.fetchPageBodyText('tok', 'pg1')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const url = fetchMock.mock.calls[0][0] as string
+    expect(url).toContain('/blocks/pg1/children')
+    expect(url).toMatch(/page_size=\d+/) // 상한 지정, 페이지네이션 없음
+  })
+
+  it('skips unsupported blocks (image/divider) that carry no rich_text without crashing', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({
+        results: [
+          { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'kept' }] } },
+          { type: 'image', image: { file: { url: 'https://x/y.png' } } },
+          { type: 'divider', divider: {} },
+          { type: 'paragraph', paragraph: { rich_text: [] } }, // 빈 블록 → 필터
+        ],
+      }),
+    )
+    expect(await notion.fetchPageBodyText('tok', 'pg1')).toBe('kept')
+  })
+
+  it('throws with status only (no body leak) on non-2xx', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) })
+    await expect(notion.fetchPageBodyText('tok', 'pg1')).rejects.toThrow('429')
+  })
+})
+
 describe('getDatabaseProperties', () => {
   it('flattens the Notion properties object into a (name, type) list', async () => {
     fetchMock.mockResolvedValueOnce(
