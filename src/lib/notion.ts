@@ -8,6 +8,17 @@ type RichText = { plain_text?: string }
 type SearchResult = { id: string; title?: RichText[] }
 type SearchResponse = { results: SearchResult[]; has_more: boolean; next_cursor: string | null }
 
+// Notion property는 타입마다 JSON shape이 제각각(title/date/rich_text/select/url...).
+// 엄격 union으로 좁히면 미지원 타입에서 깨지므로 느슨한 인덱스 타입 + 추출 시 옵셔널 체이닝
+// (notion-api 스킬: property 타입별 추출). 값 해석은 events.ts 몫.
+export type NotionPropertyValue = { type?: string; [k: string]: unknown }
+export type NotionPage = {
+  id: string
+  url?: string
+  properties: Record<string, NotionPropertyValue>
+}
+type QueryResponse = { results: NotionPage[]; has_more: boolean; next_cursor: string | null }
+
 function authHeaders(accessToken: string): HeadersInit {
   return {
     Authorization: `Bearer ${accessToken}`,
@@ -51,6 +62,37 @@ export async function searchDatabases(
   } while (cursor)
 
   return databases
+}
+
+// 피드 요청마다 DB 전체 페이지를 실시간 조회한다(저장 없음, Notion이 원본). search와 동일한
+// do-while 페이지네이션 — has_more가 false일 때까지 next_cursor로 루프. 이 루프를 빼면 100개
+// 초과 DB가 조용히 잘린다 (notion-api 스킬, 협상 불가 = 이 도메인 1번 버그).
+export async function queryDatabase(
+  accessToken: string,
+  databaseId: string,
+): Promise<NotionPage[]> {
+  const pages: NotionPage[] = []
+  let cursor: string | undefined
+
+  do {
+    const res = await fetch(`${API}/databases/${databaseId}/query`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {}),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    })
+    // 본문에 상세/토큰 흔적이 있을 수 있어 status만 표면화.
+    if (!res.ok) throw new Error(`Notion query failed: ${res.status}`)
+
+    const page = (await res.json()) as QueryResponse
+    pages.push(...page.results)
+    cursor = page.has_more && page.next_cursor ? page.next_cursor : undefined
+  } while (cursor)
+
+  return pages
 }
 
 // DB retrieve로 속성 목록을 (이름, 타입) 배열로 평탄화한다. 매핑 자동감지·검증의 원본.
