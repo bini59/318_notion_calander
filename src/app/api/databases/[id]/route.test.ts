@@ -57,6 +57,23 @@ describe('GET /api/databases/[id]', () => {
     expect(getDatabaseProperties).toHaveBeenCalledWith('tok', 'db1')
   })
 
+  it('forwards select/status options through to the response (#15)', async () => {
+    readSession.mockReturnValue('user-1')
+    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getDatabaseProperties.mockResolvedValue([
+      { name: 'Status', type: 'status', options: [{ name: 'Todo' }, { name: 'Done' }] },
+      { name: 'When', type: 'date' },
+    ])
+    const res = await GET(req(), ctx)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      properties: [
+        { name: 'Status', type: 'status', options: [{ name: 'Todo' }, { name: 'Done' }] },
+        { name: 'When', type: 'date' },
+      ],
+    })
+  })
+
   it('returns 502 without leaking detail when Notion fails', async () => {
     readSession.mockReturnValue('user-1')
     getDecryptedTokenByUserId.mockReturnValue('tok')

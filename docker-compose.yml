@@ -1,8 +1,11 @@
 services:
   app:
     build: .
-    ports:
-      - "3000:3000"
+    # 컨테이너로 뜬 cloudflared가 이 이름:3000 으로 직접 붙는다 (호스트 포트 게시 불필요 —
+    # 호스트 3000은 이미 다른 앱이 점유 중). 터널을 이 서비스 네트워크에 연결해서 쓴다.
+    container_name: notion-ical
+    expose:
+      - "3000"
     env_file: .env
     environment:
       # 마운트 지점으로 절대경로 고정 (.env의 상대경로 모호성 제거)

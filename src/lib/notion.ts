@@ -115,12 +115,23 @@ export async function queryDatabase(
   return pages
 }
 
-// DB retrieve로 속성 목록을 (이름, 타입) 배열로 평탄화한다. 매핑 자동감지·검증의 원본.
+// DB retrieve로 속성 목록을 (이름, 타입, [옵션]) 배열로 평탄화한다. 매핑 자동감지·검증의 원본.
 // Notion `properties`는 이름을 키로 갖는 객체 → 필드 매핑 UI가 다루기 쉽게 배열로 편다.
+// select/status/multi_select만 옵션 목록을 실어 필터 값 드롭다운(#15)에 쓴다 — 추가 API 호출
+// 없이 이미 받은 retrieve 응답의 `properties[name].<type>.options`에서 name만 추출. status는
+// options+groups를 갖지만 options만 쓴다(그룹은 옵션의 상위 묶음일 뿐, 값은 옵션 name). 옵셔널
+// 체이닝으로 방어 → 그 외 타입은 options undefined(자동감지·검증은 name/type만 봐 하위호환).
+type PropertyDef = {
+  type: string
+  select?: { options?: { name: string }[] }
+  status?: { options?: { name: string }[] }
+  multi_select?: { options?: { name: string }[] }
+}
+
 export async function getDatabaseProperties(
   accessToken: string,
   databaseId: string,
-): Promise<{ name: string; type: string }[]> {
+): Promise<{ name: string; type: string; options?: { name: string }[] }[]> {
   const res = await fetch(`${API}/databases/${databaseId}`, {
     headers: authHeaders(accessToken),
     signal: AbortSignal.timeout(10_000),
@@ -128,6 +139,10 @@ export async function getDatabaseProperties(
   // 본문에 상세/토큰 흔적이 있을 수 있어 status만 표면화.
   if (!res.ok) throw new Error(`Notion database retrieve failed: ${res.status}`)
 
-  const { properties } = (await res.json()) as { properties: Record<string, { type: string }> }
-  return Object.entries(properties ?? {}).map(([name, { type }]) => ({ name, type }))
+  const { properties } = (await res.json()) as { properties: Record<string, PropertyDef> }
+  return Object.entries(properties ?? {}).map(([name, def]) => {
+    const rawOptions = def[def.type as 'select' | 'status' | 'multi_select']?.options
+    const options = rawOptions?.map((o) => ({ name: o.name }))
+    return { name, type: def.type, ...(options ? { options } : {}) }
+  })
 }

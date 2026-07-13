@@ -105,6 +105,8 @@ export default function Setup() {
     [properties],
   )
   const typeOfProp = (name: string) => properties?.find((p) => p.name === name)?.type
+  // select/status 값 드롭다운(#15)에 쓸 옵션 목록. 없으면 자유텍스트 폴백 → undefined 반환.
+  const optionsOfProp = (name: string) => properties?.find((p) => p.name === name)?.options
 
   // 필터 행 불변 조작 헬퍼.
   const updateRow = (i: number, patch: Partial<FilterRow>) =>
@@ -364,12 +366,27 @@ export default function Setup() {
                             <option value="equals">=</option>
                             <option value="does_not_equal">≠</option>
                           </select>{' '}
-                          <input
-                            aria-label={`필터 ${i + 1} 값`}
-                            value={row.value}
-                            placeholder="값 (예: Done)"
-                            onChange={(e) => updateRow(i, { value: e.target.value })}
-                          />
+                          {optionsOfProp(row.property)?.length ? (
+                            <select
+                              aria-label={`필터 ${i + 1} 값`}
+                              value={row.value}
+                              onChange={(e) => updateRow(i, { value: e.target.value })}
+                            >
+                              <option value="">값 선택</option>
+                              {optionsOfProp(row.property)!.map((o) => (
+                                <option key={o.name} value={o.name}>
+                                  {o.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              aria-label={`필터 ${i + 1} 값`}
+                              value={row.value}
+                              placeholder="값 (예: Done)"
+                              onChange={(e) => updateRow(i, { value: e.target.value })}
+                            />
+                          )}
                         </>
                       )}{' '}
                       <button type="button" onClick={() => removeRow(i)}>

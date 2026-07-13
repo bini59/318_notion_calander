@@ -169,6 +169,38 @@ describe('getDatabaseProperties', () => {
     expect(props.some((p) => p.type === 'date')).toBe(false)
   })
 
+  it('parses select/status/multi_select options as {name}[]; status ignores groups', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({
+        properties: {
+          Place: { type: 'select', select: { options: [{ id: '1', name: 'HQ', color: 'red' }, { id: '2', name: 'Home' }] } },
+          Status: {
+            type: 'status',
+            status: {
+              options: [{ id: 's1', name: 'Todo' }, { id: 's2', name: 'Done' }],
+              groups: [{ id: 'g1', name: 'In progress', option_ids: ['s1'] }],
+            },
+          },
+          Tags: { type: 'multi_select', multi_select: { options: [{ id: 't1', name: 'urgent' }] } },
+        },
+      }),
+    )
+    const props = await notion.getDatabaseProperties('tok', 'db1')
+    expect(props).toEqual([
+      { name: 'Place', type: 'select', options: [{ name: 'HQ' }, { name: 'Home' }] },
+      { name: 'Status', type: 'status', options: [{ name: 'Todo' }, { name: 'Done' }] },
+      { name: 'Tags', type: 'multi_select', options: [{ name: 'urgent' }] },
+    ])
+  })
+
+  it('leaves options undefined for non-option types (date/title/rich_text)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({ properties: { When: { type: 'date' }, Name: { type: 'title' }, Notes: { type: 'rich_text' } } }),
+    )
+    const props = await notion.getDatabaseProperties('tok', 'db1')
+    expect(props.every((p) => p.options === undefined)).toBe(true)
+  })
+
   it('throws with status only (no body leak) on non-2xx', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({}) })
     await expect(notion.getDatabaseProperties('tok', 'db1')).rejects.toThrow('403')

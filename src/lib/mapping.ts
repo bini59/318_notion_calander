@@ -28,7 +28,9 @@ export const mappingSchema = z.object({
 export type CalendarMapping = z.infer<typeof mappingSchema>
 
 // notion-api 스킬: property는 이름별로 타입이 다르다. 자동감지/검증은 (name,type)만 본다.
-export type NotionProperty = { name: string; type: string }
+// options는 select/status/multi_select에만 실린다(#15 필터 값 드롭다운). 옵셔널이라
+// 기존 (name,type) 소비자(autoDetectMapping/validateMappingAgainstProperties)는 무영향.
+export type NotionProperty = { name: string; type: string; options?: { name: string }[] }
 
 // title은 DB당 정확히 1개(SUMMARY 자동), start는 첫 date 속성(필수)을 기본값으로 제안.
 // 나머지는 사용자 선택 몫이라 자동감지하지 않는다. 없으면 미포함 → Partial.
