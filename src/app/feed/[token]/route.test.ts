@@ -4,13 +4,15 @@ import { invalidateFeed } from '@/lib/feed-cache'
 const getCalendarByFeedToken = vi.fn()
 const getDecryptedTokenByUserId = vi.fn()
 const queryDatabase = vi.fn()
+const fetchPageBodyText = vi.fn()
 
 vi.mock('@/lib/calendars', () => ({ getCalendarByFeedToken }))
 vi.mock('@/lib/users', () => ({ getDecryptedTokenByUserId }))
-// buildNotionFilter는 실제 구현 유지(라우트가 mapping.filters를 넘긴다) — queryDatabase만 모킹.
+// buildNotionFilter는 실제 구현 유지(라우트가 mapping.filters를 넘긴다) — queryDatabase/fetchPageBodyText만 모킹.
 vi.mock('@/lib/notion', async () => ({
   ...(await vi.importActual<typeof import('@/lib/notion')>('@/lib/notion')),
   queryDatabase,
+  fetchPageBodyText,
 }))
 // feed-cache는 실제 모듈 — 캐시 hit/miss가 queryDatabase 호출횟수로 관측되게 태운다(#11).
 // events.ts / ics.ts는 순수함수 — 실제 로직으로 직렬화 계약을 태운다(모킹 안 함).
@@ -25,6 +27,7 @@ beforeEach(() => {
   getCalendarByFeedToken.mockReset()
   getDecryptedTokenByUserId.mockReset()
   queryDatabase.mockReset()
+  fetchPageBodyText.mockReset()
 })
 
 const params = (token: string) => ({ params: Promise.resolve({ token }) })
@@ -113,5 +116,69 @@ describe('GET /feed/[token].ics — 5분 캐시 (#11)', () => {
     const ok = await GET(new Request('http://x/feed/cache3.ics'), params('cache3.ics'))
     expect(ok.status).toBe(200)
     expect(queryDatabase).toHaveBeenCalledTimes(2) // 502가 캐시됐다면 2회가 아니었을 것
+  })
+})
+
+describe("GET /feed/[token].ics — descriptionSource 'body' (#17)", () => {
+  const twoPages = [
+    { id: 'pg1', url: 'https://notion.so/pg1', properties: { Name: { title: [{ plain_text: 'A' }] }, When: { date: { start: '2026-07-13' } } } },
+    { id: 'pg2', url: 'https://notion.so/pg2', properties: { Name: { title: [{ plain_text: 'B' }] }, When: { date: { start: '2026-07-14' } } } },
+  ]
+
+  beforeEach(() => {
+    getDecryptedTokenByUserId.mockReturnValue('tok')
+    queryDatabase.mockResolvedValue(twoPages)
+  })
+
+  it('fetches page body once per page and injects it into DESCRIPTION', async () => {
+    invalidateFeed('body1')
+    getCalendarByFeedToken.mockReturnValue({
+      userId: 'u1',
+      databaseId: 'db1',
+      mapping: { title: 'Name', start: 'When', descriptionSource: 'body' },
+    })
+    fetchPageBodyText.mockImplementation(async (_tok: string, id: string) => `body of ${id}`)
+
+    const res = await GET(new Request('http://x/feed/body1.ics'), params('body1.ics'))
+    expect(res.status).toBe(200)
+    // 페이지당 정확히 1회 (N+1 순차 루프).
+    expect(fetchPageBodyText).toHaveBeenCalledTimes(2)
+    const body = await res.text()
+    expect(body).toContain('body of pg1')
+    expect(body).toContain('body of pg2')
+  })
+
+  it('degrades per-page: one body fetch failing still emits every event, only that page loses description', async () => {
+    invalidateFeed('bodyfail1')
+    getCalendarByFeedToken.mockReturnValue({
+      userId: 'u1',
+      databaseId: 'db1',
+      mapping: { title: 'Name', start: 'When', descriptionSource: 'body' },
+    })
+    fetchPageBodyText.mockImplementation(async (_tok: string, id: string) => {
+      if (id === 'pg1') throw new Error('Notion block children failed: 500')
+      return `body of ${id}`
+    })
+
+    const res = await GET(new Request('http://x/feed/bodyfail1.ics'), params('bodyfail1.ics'))
+    expect(res.status).toBe(200) // 한 페이지 실패로 피드 전체가 죽지 않는다
+    const body = await res.text()
+    expect(body).toContain('UID:pg1') // 이벤트 자체는 나옴
+    expect(body).toContain('UID:pg2')
+    expect(body).toContain('body of pg2') // 성공한 페이지는 description 있음
+    expect(body).not.toContain('body of pg1') // 실패한 페이지만 description 없음
+  })
+
+  it("does not fetch page bodies for the default 'property' source (추가 호출 0)", async () => {
+    invalidateFeed('prop1')
+    getCalendarByFeedToken.mockReturnValue({
+      userId: 'u1',
+      databaseId: 'db1',
+      mapping: { title: 'Name', start: 'When' }, // descriptionSource 부재 = property
+    })
+
+    const res = await GET(new Request('http://x/feed/prop1.ics'), params('prop1.ics'))
+    expect(res.status).toBe(200)
+    expect(fetchPageBodyText).not.toHaveBeenCalled()
   })
 })

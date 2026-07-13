@@ -37,6 +37,10 @@ export const mappingSchema = z.object({
   start: z.string().min(1),
   end: z.string().min(1).optional(),
   description: z.string().min(1).optional(),
+  // descriptionSource(#17): description을 property에서(기본) 뽑을지 페이지 본문 블록에서 뽑을지.
+  // 부재 = 'property'로 해석(falsy 하위호환) → 기존 저장 mapping은 그대로 property 소스.
+  // 'body'면 description(property 이름)은 무시되고 route가 블록 API로 본문을 채운다(옵션 B — sentinel 금지).
+  descriptionSource: z.enum(['property', 'body']).optional(),
   location: z.string().min(1).optional(),
   filters: z.array(filterSchema).optional(),
 })
@@ -94,7 +98,9 @@ export function validateMappingAgainstProperties(
   }
 
   // description / location 은 존재만 확인 — PLAN §5: text/select/url 등 타입이 다양해 관대하게.
+  // descriptionSource==='body'(#17)면 description은 property가 아니라 페이지 본문 블록 → 존재검사 스킵.
   for (const field of ['description', 'location'] as const) {
+    if (field === 'description' && mapping.descriptionSource === 'body') continue
     const name = mapping[field]
     if (!name) continue
     if (typeOf(name) === undefined) {

@@ -33,6 +33,8 @@ export default function Setup() {
   const [start, setStart] = useState('')
   const [end, setEnd] = useState(NONE)
   const [description, setDescription] = useState(NONE)
+  // description 소스(#17): 'property'(기본, 아래 드롭다운) vs 'body'(페이지 본문 앞부분).
+  const [descriptionSource, setDescriptionSource] = useState<'property' | 'body'>('property')
   const [location, setLocation] = useState(NONE)
   const [filterRows, setFilterRows] = useState<FilterRowData[]>([])
   // relation 옵션 캐시(#16): property 이름 → 로딩/에러/결과. 행이 relation으로 바뀌면 1회 fetch.
@@ -84,6 +86,7 @@ export default function Setup() {
       setStart(auto.start ?? '')
       setEnd(NONE)
       setDescription(NONE)
+      setDescriptionSource('property')
       setLocation(NONE)
       setFilterRows([])
       setRelationState({})
@@ -192,7 +195,12 @@ export default function Setup() {
         title: titleProp,
         start,
         ...(end !== NONE ? { end } : {}),
-        ...(description !== NONE ? { description } : {}),
+        // 소스='body'면 descriptionSource만 보내고 property 이름은 생략(본문에서 채움). property면 기존 흐름.
+        ...(descriptionSource === 'body'
+          ? { descriptionSource: 'body' as const }
+          : description !== NONE
+            ? { description }
+            : {}),
         ...(location !== NONE ? { location } : {}),
         ...(filters.length ? { filters } : {}),
       }
@@ -345,19 +353,46 @@ export default function Setup() {
               </label>
             </p>
 
-            <p>
+            <fieldset style={{ marginTop: 8 }}>
+              <legend>설명(선택)</legend>
               <label>
-                설명(선택):{' '}
-                <select value={description} onChange={(e) => setDescription(e.target.value)}>
-                  <option value={NONE}>없음(-)</option>
-                  {properties.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="radio"
+                  name="descriptionSource"
+                  value="property"
+                  checked={descriptionSource === 'property'}
+                  onChange={() => setDescriptionSource('property')}
+                />{' '}
+                속성에서
+              </label>{' '}
+              <label>
+                <input
+                  type="radio"
+                  name="descriptionSource"
+                  value="body"
+                  checked={descriptionSource === 'body'}
+                  onChange={() => setDescriptionSource('body')}
+                />{' '}
+                페이지 본문에서
               </label>
-            </p>
+              {descriptionSource === 'property' ? (
+                <p>
+                  <label>
+                    속성:{' '}
+                    <select value={description} onChange={(e) => setDescription(e.target.value)}>
+                      <option value={NONE}>없음(-)</option>
+                      {properties.map((p) => (
+                        <option key={p.name} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </p>
+              ) : (
+                <p>페이지 본문의 앞부분(최대 몇 블록)을 설명으로 사용합니다.</p>
+              )}
+            </fieldset>
 
             <p>
               <label>

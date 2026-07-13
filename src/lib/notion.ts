@@ -157,6 +157,41 @@ export async function queryRelationPages(
   return results.map((page) => ({ id: page.id, title: extractPageTitle(page) }))
 }
 
+// description 소스='body'(#17)에서 읽을 페이지 본문 블록 상한. children 요청 1회의 page_size —
+// 앞 N블록을 description 프리뷰로 쓴다(전체 본문 아님).
+const BODY_BLOCK_LIMIT = 10
+
+type BlockRichText = { plain_text?: string }
+type Block = { type?: string; [k: string]: unknown }
+type BlockChildrenResponse = { results: Block[] }
+
+// 페이지 본문 앞부분을 텍스트로 합친다(#17, description 소스='body'). GET /v1/blocks/{page_id}/children.
+// 타입별 rich_text: block[block.type]?.rich_text — paragraph/heading_1~3/bulleted·numbered_list_item/
+// to_do/quote/callout 모두 이 shape이라 allowlist 불필요. image/divider/table 등 rich_text 부재 타입은
+// 옵셔널 체이닝으로 자연 스킵(크래시 금지). 블록들을 \n으로 join, 빈 블록 필터. status-only 에러.
+// ponytail: 단일 요청·상위 BODY_BLOCK_LIMIT 블록만 — 블록 페이지네이션·중첩 children 안 함
+//   (queryRelationPages와 같은 상한 패턴). 페이지당 +1 호출이라 route에서 순차로만 부른다(rate limit).
+//   전체 본문/깊은 중첩이 실사용 요구면 페이지네이션+재귀 추가.
+export async function fetchPageBodyText(accessToken: string, pageId: string): Promise<string> {
+  const res = await fetch(`${API}/blocks/${pageId}/children?page_size=${BODY_BLOCK_LIMIT}`, {
+    headers: authHeaders(accessToken),
+    signal: AbortSignal.timeout(10_000),
+  })
+  // 본문에 상세/토큰 흔적이 있을 수 있어 status만 표면화.
+  if (!res.ok) throw new Error(`Notion block children failed: ${res.status}`)
+
+  const { results } = (await res.json()) as BlockChildrenResponse
+  return results
+    .map((block) => {
+      const rich = (block[block.type as string] as { rich_text?: BlockRichText[] } | undefined)
+        ?.rich_text
+      if (!Array.isArray(rich)) return ''
+      return rich.map((t) => t.plain_text ?? '').join('')
+    })
+    .filter((line) => line.length > 0)
+    .join('\n')
+}
+
 // DB retrieve로 속성 목록을 (이름, 타입, [옵션]) 배열로 평탄화한다. 매핑 자동감지·검증의 원본.
 // Notion `properties`는 이름을 키로 갖는 객체 → 필드 매핑 UI가 다루기 쉽게 배열로 편다.
 // select/status/multi_select만 옵션 목록을 실어 필터 값 드롭다운(#15)에 쓴다 — 추가 API 호출

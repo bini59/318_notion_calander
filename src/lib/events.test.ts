@@ -109,3 +109,39 @@ describe('pagesToEvents — property extraction', () => {
     expect(event.end).toBe('2026-07-15')
   })
 })
+
+describe('pagesToEvents — descriptionSource body (#17)', () => {
+  const bodyMapping: CalendarMapping = { title: 'Name', start: 'When', descriptionSource: 'body' }
+
+  it("uses the injected body map (not the property) when source is 'body'", () => {
+    const pages = [
+      page('pg1', {
+        Name: { title: [{ plain_text: 'Standup' }] },
+        When: { date: { start: '2026-07-13' } },
+        Notes: { type: 'rich_text', rich_text: [{ plain_text: 'IGNORED property text' }] },
+      }),
+    ]
+    const bodyTextByPage = new Map([['pg1', 'first block\nsecond block']])
+    const [event] = pagesToEvents(pages, bodyMapping, bodyTextByPage)
+    expect(event.description).toBe('first block\nsecond block')
+  })
+
+  it('yields undefined description on a map miss (no body fetched for that page)', () => {
+    const pages = [page('pg1', { Name: { title: [] }, When: { date: { start: '2026-07-13' } } })]
+    const [event] = pagesToEvents(pages, bodyMapping, new Map())
+    expect(event.description).toBeUndefined()
+  })
+
+  it("leaves property extraction unchanged for the default 'property' source (하위호환)", () => {
+    // descriptionSource 부재 + 주입 map 있어도 property 소스는 map을 쓰지 않는다.
+    const pages = [
+      page('pg1', {
+        Name: { title: [{ plain_text: 'x' }] },
+        When: { date: { start: '2026-07-13' } },
+        Notes: { type: 'rich_text', rich_text: [{ plain_text: 'from property' }] },
+      }),
+    ]
+    const [event] = pagesToEvents(pages, mapping, new Map([['pg1', 'from body']]))
+    expect(event.description).toBe('from property')
+  })
+})

@@ -2,7 +2,7 @@ import { getCalendarByFeedToken } from '@/lib/calendars'
 import { getCachedFeed, setCachedFeed } from '@/lib/feed-cache'
 import { eventsToIcs } from '@/lib/ics'
 import { pagesToEvents } from '@/lib/events'
-import { buildNotionFilter, queryDatabase } from '@/lib/notion'
+import { buildNotionFilter, fetchPageBodyText, queryDatabase } from '@/lib/notion'
 import { getDecryptedTokenByUserId } from '@/lib/users'
 
 // 캘린더 앱이 구독하는 최종 출력 (이슈 #7, PLAN §3·§6). feed_token으로 캘린더를 찾아 소유자
@@ -45,7 +45,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       calendar.databaseId,
       buildNotionFilter(calendar.mapping.filters),
     )
-    const ics = eventsToIcs(pagesToEvents(pages, calendar.mapping))
+    // description 소스='body'(#17)일 때만 각 페이지 본문을 조회해 map으로 매퍼에 주입. property 소스면 추가 호출 0.
+    // ponytail: 페이지당 +1 순차 fetch(O(pages)) — 순차 await는 동시 폭주만 막을 뿐 3req/s throttle은 아님.
+    //   실제 throttle/배치 동시성은 콜드 fetch 지연 실측 후 업그레이드. 5분 캐시(#11)가 반복 요청을 흡수.
+    // 본문은 optional preview라 페이지별 실패는 삼켜 degrade — 한 페이지 실패로 피드 전체를 502로 죽이지 않는다.
+    //   map miss는 매퍼가 description 없음(undefined)으로 처리(events.ts).
+    let bodyTextByPage: Map<string, string> | undefined
+    if (calendar.mapping.descriptionSource === 'body') {
+      bodyTextByPage = new Map()
+      for (const page of pages) {
+        try {
+          bodyTextByPage.set(page.id, await fetchPageBodyText(accessToken, page.id))
+        } catch (e) {
+          console.error(`body fetch failed for ${page.id}:`, e) // map miss → description 없음
+        }
+      }
+    }
+    const ics = eventsToIcs(pagesToEvents(pages, calendar.mapping, bodyTextByPage))
 
     setCachedFeed(token, ics) // 성공 .ics만 캐시 — 아래 catch(404/502)는 저장 안 함.
     return icsResponse(ics, token)
