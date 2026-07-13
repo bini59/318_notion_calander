@@ -98,6 +98,57 @@ describe('queryDatabase pagination', () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) })
     await expect(notion.queryDatabase('tok', 'db1')).rejects.toThrow('429')
   })
+
+  it('omits the filter key from the body when no filter is passed', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ results: [], has_more: false, next_cursor: null }))
+    await notion.queryDatabase('tok', 'db1')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).not.toHaveProperty('filter')
+  })
+
+  it('forwards the built filter body (Status does_not_equal Done — 완료조건)', async () => {
+    const filter = notion.buildNotionFilter([
+      { type: 'status', property: 'Status', condition: 'does_not_equal', value: 'Done' },
+    ])
+    fetchMock.mockResolvedValueOnce(ok({ results: [], has_more: false, next_cursor: null }))
+    await notion.queryDatabase('tok', 'db1', filter)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).filter).toEqual({
+      and: [{ property: 'Status', status: { does_not_equal: 'Done' } }],
+    })
+  })
+
+  it('keeps the filter on every page while paginating (filter + start_cursor together)', async () => {
+    const filter = notion.buildNotionFilter([{ type: 'checkbox', property: 'Done', value: true }])
+    fetchMock
+      .mockResolvedValueOnce(ok({ results: [], has_more: true, next_cursor: 'cursor-2' }))
+      .mockResolvedValueOnce(ok({ results: [], has_more: false, next_cursor: null }))
+    await notion.queryDatabase('tok', 'db1', filter)
+    const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body)
+    expect(secondBody.start_cursor).toBe('cursor-2')
+    expect(secondBody.filter).toEqual({ and: [{ property: 'Done', checkbox: { equals: true } }] })
+  })
+})
+
+describe('buildNotionFilter', () => {
+  it('returns undefined for no/empty filters (no empty {and:[]} to Notion)', () => {
+    expect(notion.buildNotionFilter()).toBeUndefined()
+    expect(notion.buildNotionFilter([])).toBeUndefined()
+  })
+
+  it('wraps multiple filters in an AND with per-type Notion shapes', () => {
+    expect(
+      notion.buildNotionFilter([
+        { type: 'select', property: 'Place', condition: 'equals', value: 'HQ' },
+        { type: 'status', property: 'Status', condition: 'does_not_equal', value: 'Done' },
+        { type: 'checkbox', property: 'Done', value: false },
+      ]),
+    ).toEqual({
+      and: [
+        { property: 'Place', select: { equals: 'HQ' } },
+        { property: 'Status', status: { does_not_equal: 'Done' } },
+        { property: 'Done', checkbox: { equals: false } },
+      ],
+    })
+  })
 })
 
 describe('getDatabaseProperties', () => {

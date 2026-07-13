@@ -4,12 +4,25 @@ import { z } from 'zod'
 // start 필수, title 자동(DB당 1개), 나머지 선택. 이 스키마가 Calendar.mapping JSON 계약.
 // ponytail: Notion date 속성 자체가 range(start/end)를 가지므로 별도 `end`는 "종료일 전용
 // 컬럼"을 쓰는 DB에서만 채운다. 단일 date의 range 해석은 .ics 생성(#6) 몫 — 여기선 저장만.
+// 이벤트 필터(이슈 #13). MVP 상한: 타입 select/status/checkbox, 조건 equals/does_not_equal(AND만).
+// 클라가 raw Notion filter JSON을 보내지 못하게 구조화된 {type,property,...}만 받는다 —
+// Notion filter DSL로의 변환은 서버(notion.ts buildNotionFilter) 몫. 상한 초과(date/number/OR/
+// 중첩)는 여기서 거부 = 임의 필터 빌더 금지. value는 자유 텍스트(옵션 목록 페치 안 함).
+const conditionEnum = z.enum(['equals', 'does_not_equal'])
+export const filterSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('select'), property: z.string().min(1), condition: conditionEnum, value: z.string().min(1) }),
+  z.object({ type: z.literal('status'), property: z.string().min(1), condition: conditionEnum, value: z.string().min(1) }),
+  z.object({ type: z.literal('checkbox'), property: z.string().min(1), value: z.boolean() }),
+])
+export type CalendarFilter = z.infer<typeof filterSchema>
+
 export const mappingSchema = z.object({
   title: z.string().min(1),
   start: z.string().min(1),
   end: z.string().min(1).optional(),
   description: z.string().min(1).optional(),
   location: z.string().min(1).optional(),
+  filters: z.array(filterSchema).optional(),
 })
 
 export type CalendarMapping = z.infer<typeof mappingSchema>
@@ -39,7 +52,8 @@ export function validateMappingAgainstProperties(
     properties.find((p) => p.name === name)?.type
 
   // title / start / end 는 타입까지 강제(SUMMARY·DTSTART·DTEND 의미론).
-  const typed: [keyof CalendarMapping, string][] = [
+  // 'filters'는 배열이라 mapping[field] 유니온에 섞이면 안 됨 → 문자열 필드만 키로 좁힌다.
+  const typed: [Extract<keyof CalendarMapping, 'title' | 'start' | 'end'>, string][] = [
     ['title', 'title'],
     ['start', 'date'],
     ['end', 'date'],
@@ -60,6 +74,16 @@ export function validateMappingAgainstProperties(
     if (!name) continue
     if (typeOf(name) === undefined) {
       return `매핑된 속성 '${name}'이(가) DB에 존재하지 않습니다`
+    }
+  }
+
+  // filters(#13): 신뢰경계 — 클라가 보낸 필터를 그대로 Notion에 넘기지 않는다. 각 필터 property가
+  // 실제 존재하고 타입이 선언한 type(select/status/checkbox)과 일치하는지 재확인. 위조/미존재 거부.
+  for (const f of mapping.filters ?? []) {
+    const actual = typeOf(f.property)
+    if (actual === undefined) return `필터 속성 '${f.property}'이(가) DB에 존재하지 않습니다`
+    if (actual !== f.type) {
+      return `필터 속성 '${f.property}'의 타입은 '${f.type}'이어야 합니다 (현재: '${actual}')`
     }
   }
 
