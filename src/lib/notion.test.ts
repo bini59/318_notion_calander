@@ -73,18 +73,26 @@ describe('searchDatabases pagination', () => {
   })
 })
 
-describe('hasDateProperty', () => {
-  it('returns true when any property is of type date', async () => {
+describe('getDatabaseProperties', () => {
+  it('flattens the Notion properties object into a (name, type) list', async () => {
     fetchMock.mockResolvedValueOnce(
-      ok({ properties: { Name: { type: 'title' }, When: { type: 'date' } } }),
+      ok({ properties: { Name: { type: 'title' }, When: { type: 'date' }, Notes: { type: 'rich_text' } } }),
     )
-    expect(await notion.hasDateProperty('tok', 'db1')).toBe(true)
+    expect(await notion.getDatabaseProperties('tok', 'db1')).toEqual([
+      { name: 'Name', type: 'title' },
+      { name: 'When', type: 'date' },
+      { name: 'Notes', type: 'rich_text' },
+    ])
   })
 
-  it('returns false when no date property exists', async () => {
-    fetchMock.mockResolvedValueOnce(
-      ok({ properties: { Name: { type: 'title' }, Tags: { type: 'multi_select' } } }),
-    )
-    expect(await notion.hasDateProperty('tok', 'db1')).toBe(false)
+  it('returns an empty list when the DB has no date property (0-date case)', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ properties: { Tags: { type: 'multi_select' } } }))
+    const props = await notion.getDatabaseProperties('tok', 'db1')
+    expect(props.some((p) => p.type === 'date')).toBe(false)
+  })
+
+  it('throws with status only (no body leak) on non-2xx', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({}) })
+    await expect(notion.getDatabaseProperties('tok', 'db1')).rejects.toThrow('403')
   })
 })
