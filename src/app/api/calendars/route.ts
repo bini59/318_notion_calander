@@ -33,8 +33,9 @@ export async function POST(req: NextRequest) {
     const reason = validateMappingAgainstProperties(mapping, properties)
     if (reason) return NextResponse.json({ error: reason }, { status: 400 })
 
-    const { feedUrl } = createCalendar({ userId, databaseId, mapping })
-    return NextResponse.json({ feedUrl }, { status: 201 })
+    const { id, feedUrl } = createCalendar({ userId, databaseId, mapping })
+    // id는 setup이 재발급(POST /api/calendars/[id]/rotate)에 쓴다 (이슈 #8).
+    return NextResponse.json({ id, feedUrl }, { status: 201 })
   } catch (error) {
     console.error('Calendar creation failed:', error)
     return NextResponse.json({ error: 'Failed to create calendar' }, { status: 502 })

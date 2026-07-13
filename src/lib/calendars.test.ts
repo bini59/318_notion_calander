@@ -84,3 +84,42 @@ describe('getCalendarByFeedToken (feed auth boundary)', () => {
     expect(() => calendars.getCalendarByFeedToken('tok-bad')).toThrow()
   })
 })
+
+describe('rotateFeedToken (feed token re-issue, IDOR boundary)', () => {
+  it('invalidates the old token and activates a new one (완료조건)', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rot' })
+    const { id, feedToken: oldToken, feedUrl: oldUrl } = calendars.createCalendar({
+      userId,
+      databaseId: 'db-rot',
+      mapping,
+    })
+
+    const result = calendars.rotateFeedToken(id, userId)
+    expect(result).toBeDefined()
+    expect(result!.feedUrl).not.toBe(oldUrl)
+
+    // 옛 토큰 → undefined (즉시 무효), 새 토큰 → resolve.
+    expect(calendars.getCalendarByFeedToken(oldToken)).toBeUndefined()
+    const newToken = result!.feedUrl.match(/\/feed\/(.+)\.ics$/)![1]
+    expect(calendars.getCalendarByFeedToken(newToken)).toEqual({
+      userId,
+      databaseId: 'db-rot',
+      mapping,
+    })
+  })
+
+  it('refuses to rotate a calendar owned by another user (IDOR → undefined, no change)', () => {
+    const owner = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-owner' })
+    const attacker = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-attacker' })
+    const { id, feedToken } = calendars.createCalendar({ userId: owner, databaseId: 'db-idor', mapping })
+
+    expect(calendars.rotateFeedToken(id, attacker)).toBeUndefined()
+    // 남의 재발급 시도는 토큰을 바꾸지 않아야 한다 — 소유자 URL은 여전히 유효.
+    expect(calendars.getCalendarByFeedToken(feedToken)).toBeDefined()
+  })
+
+  it('returns undefined for a non-existent calendar id', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-ghost-cal' })
+    expect(calendars.rotateFeedToken('no-such-id', userId)).toBeUndefined()
+  })
+})
