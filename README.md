@@ -5,6 +5,26 @@ Notion 데이터베이스를 표준 iCal(`.ics`) 구독 피드로 노출하는 *
 
 > 이 저장소는 셀프호스팅용입니다. 각자 자기 서버에 배포하고, **자기 Notion public integration을 직접 등록**해야 합니다. 누구에게도 Notion 토큰을 넘길 필요가 없습니다.
 
+## 미리보기
+
+![필드 매핑 스텝](docs/screenshots/field-mapping.png)
+
+<p>
+  <img src="docs/screenshots/landing.png" width="440" alt="랜딩" />
+  <img src="docs/screenshots/field-mapping-mobile.png" width="200" alt="모바일 필드 매핑" />
+</p>
+
+<sub>다크모드 우선 · 모노크롬 미니멀 UI · 모바일 반응형</sub>
+
+## 기능
+
+- **필드 매핑** — Notion 속성 → iCal 필드. 제목/시작일 필수, 종료일·설명·장소 선택. 속성 타입 자동 감지.
+- **설명 소스** — 설명(DESCRIPTION)을 속성 값 또는 **페이지 본문**(앞부분 블록)에서 가져오기.
+- **필터** — select·status·checkbox·**relation**(이름으로 선택) 조건으로 이벤트 필터링. 여러 조건은 모두 AND.
+- **다중 캘린더** — 한 계정에서 여러 DB→여러 피드를 만들고 목록·삭제 관리.
+- **토큰 재발급** — 피드 URL이 유출되면 즉시 무효화하고 새 URL 발급.
+- **실시간 + 캐시** — 저장 없이 요청마다 Notion 조회, `feed_token` 단위 5분 캐시로 rate limit 완화.
+
 ## 동작 방식
 
 ```
@@ -16,7 +36,7 @@ Notion 데이터베이스를 표준 iCal(`.ics`) 구독 피드로 노출하는 *
 
 1. `BASE_URL`에 접속해 **Notion 연결(OAuth)**
 2. 통합에 공유된 **DB를 선택**
-3. Notion 속성을 캘린더 필드에 **매핑** (제목/시작일 필수, 종료일·설명·장소 선택)
+3. Notion 속성을 캘린더 필드에 **매핑**하고 필요하면 **필터** 지정 (제목/시작일 필수, 종료일·설명·장소 선택; 설명은 속성 값 또는 페이지 본문)
 4. 발급된 `.ics` **피드 URL을 캘린더 앱에서 구독**
 
 ## 1. Notion public integration 만들기
@@ -76,6 +96,8 @@ docker compose up -d --build
 1. `BASE_URL` 접속 → **Notion 연결**
 2. `/setup`에서 DB 선택 → 필드 매핑 → **캘린더 만들기**
 3. 발급된 `{BASE_URL}/feed/{token}.ics`를 캘린더 앱에서 구독
+
+> ⚠️ **모바일에서 연결이 안 되나요?** iOS에 Notion 앱이 설치돼 있으면 OAuth 인증 페이지가 앱으로 가로채져(iOS Universal Links) 연결이 완료되지 않을 수 있습니다. **최초 연결·셋업은 데스크톱에서** 하세요 — 한 번 발급된 `.ics` 피드는 로그인이 없어 모바일 캘린더 앱에서 그대로 구독됩니다.
 
 ## 4. 피드 구독
 
