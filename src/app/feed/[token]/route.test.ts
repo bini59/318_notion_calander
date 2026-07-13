@@ -7,7 +7,11 @@ const queryDatabase = vi.fn()
 
 vi.mock('@/lib/calendars', () => ({ getCalendarByFeedToken }))
 vi.mock('@/lib/users', () => ({ getDecryptedTokenByUserId }))
-vi.mock('@/lib/notion', () => ({ queryDatabase }))
+// buildNotionFilter는 실제 구현 유지(라우트가 mapping.filters를 넘긴다) — queryDatabase만 모킹.
+vi.mock('@/lib/notion', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/notion')>('@/lib/notion')),
+  queryDatabase,
+}))
 // feed-cache는 실제 모듈 — 캐시 hit/miss가 queryDatabase 호출횟수로 관측되게 태운다(#11).
 // events.ts / ics.ts는 순수함수 — 실제 로직으로 직렬화 계약을 태운다(모킹 안 함).
 

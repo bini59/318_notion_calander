@@ -2,7 +2,7 @@ import { getCalendarByFeedToken } from '@/lib/calendars'
 import { getCachedFeed, setCachedFeed } from '@/lib/feed-cache'
 import { eventsToIcs } from '@/lib/ics'
 import { pagesToEvents } from '@/lib/events'
-import { queryDatabase } from '@/lib/notion'
+import { buildNotionFilter, queryDatabase } from '@/lib/notion'
 import { getDecryptedTokenByUserId } from '@/lib/users'
 
 // 캘린더 앱이 구독하는 최종 출력 (이슈 #7, PLAN §3·§6). feed_token으로 캘린더를 찾아 소유자
@@ -37,7 +37,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   try {
     const accessToken = getDecryptedTokenByUserId(calendar.userId)
     // 전체 페이지네이션(queryDatabase가 has_more 루프) — 100개 컷 아님(notion-api 스킬).
-    const pages = await queryDatabase(accessToken, calendar.databaseId)
+    // 필터(#13)는 Notion query API로 서버푸시 — 매칭 페이지만 페이지네이션(rate limit 절감).
+    // ponytail: 필터 property가 Notion에서 삭제/타입변경되면 query API가 요청 전체를 거부→아래 catch 502로
+    //   피드 정지(fail-closed, 데이터 유출 없음). degrade-skip은 실사용 요구 시 추가.
+    const pages = await queryDatabase(
+      accessToken,
+      calendar.databaseId,
+      buildNotionFilter(calendar.mapping.filters),
+    )
     const ics = eventsToIcs(pagesToEvents(pages, calendar.mapping))
 
     setCachedFeed(token, ics) // 성공 .ics만 캐시 — 아래 catch(404/502)는 저장 안 함.

@@ -12,6 +12,8 @@ const props: NotionProperty[] = [
   { name: 'Due', type: 'date' },
   { name: 'Notes', type: 'rich_text' },
   { name: 'Place', type: 'select' },
+  { name: 'Status', type: 'status' },
+  { name: 'Done', type: 'checkbox' },
 ]
 
 describe('mappingSchema', () => {
@@ -33,6 +35,46 @@ describe('mappingSchema', () => {
 
   it('rejects empty-string field values', () => {
     const parsed = mappingSchema.safeParse({ title: '', start: 'When' })
+    expect(parsed.success).toBe(false)
+  })
+
+  it('accepts filters within the MVP ceiling (select/status/checkbox, equals/does_not_equal)', () => {
+    const parsed = mappingSchema.safeParse({
+      title: 'Name',
+      start: 'When',
+      filters: [
+        { type: 'status', property: 'Status', condition: 'does_not_equal', value: 'Done' },
+        { type: 'select', property: 'Place', condition: 'equals', value: 'HQ' },
+        { type: 'checkbox', property: 'Done', value: true },
+      ],
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rejects a filter type outside the ceiling (date/number/text — no arbitrary builder)', () => {
+    const parsed = mappingSchema.safeParse({
+      title: 'Name',
+      start: 'When',
+      filters: [{ type: 'date', property: 'When', condition: 'equals', value: '2026-01-01' }],
+    })
+    expect(parsed.success).toBe(false)
+  })
+
+  it('rejects an unsupported condition (contains/greater_than not allowed)', () => {
+    const parsed = mappingSchema.safeParse({
+      title: 'Name',
+      start: 'When',
+      filters: [{ type: 'select', property: 'Place', condition: 'contains', value: 'HQ' }],
+    })
+    expect(parsed.success).toBe(false)
+  })
+
+  it('rejects a checkbox filter with a non-boolean value', () => {
+    const parsed = mappingSchema.safeParse({
+      title: 'Name',
+      start: 'When',
+      filters: [{ type: 'checkbox', property: 'Done', value: 'true' }],
+    })
     expect(parsed.success).toBe(false)
   })
 })
@@ -104,5 +146,43 @@ describe('validateMappingAgainstProperties', () => {
       props,
     )
     expect(reason).toMatch(/존재하지 않/)
+  })
+
+  it('accepts filters whose property exists and matches the declared type', () => {
+    expect(
+      validateMappingAgainstProperties(
+        {
+          title: 'Name',
+          start: 'When',
+          filters: [{ type: 'status', property: 'Status', condition: 'does_not_equal', value: 'Done' }],
+        },
+        props,
+      ),
+    ).toBeNull()
+  })
+
+  it('rejects a filter property that does not exist (forged client filter)', () => {
+    const reason = validateMappingAgainstProperties(
+      {
+        title: 'Name',
+        start: 'When',
+        filters: [{ type: 'select', property: 'Ghost', condition: 'equals', value: 'x' }],
+      },
+      props,
+    )
+    expect(reason).toMatch(/존재하지 않/)
+  })
+
+  it('rejects a filter whose declared type mismatches the real property type', () => {
+    // 'Place' is a select, but the client claims it is a status.
+    const reason = validateMappingAgainstProperties(
+      {
+        title: 'Name',
+        start: 'When',
+        filters: [{ type: 'status', property: 'Place', condition: 'equals', value: 'x' }],
+      },
+      props,
+    )
+    expect(reason).toMatch(/타입은 'status'/)
   })
 })

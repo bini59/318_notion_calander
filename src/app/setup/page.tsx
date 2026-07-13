@@ -1,12 +1,17 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { autoDetectMapping, type NotionProperty } from '@/lib/mapping'
+import { autoDetectMapping, type CalendarFilter, type NotionProperty } from '@/lib/mapping'
 
 type Database = { id: string; title: string }
 type Calendar = { id: string; feedUrl: string }
 
 const NONE = '' // "없음(-)" 옵션 값 — 선택 매핑 미지정
+
+// 필터(#13) UI 행. property는 이름, type은 property에서 파생. condition/value는 서버 상한과 동일.
+// value는 문자열 보관(checkbox는 'true'/'false') → submit에서 CalendarFilter로 변환.
+type FilterRow = { property: string; condition: 'equals' | 'does_not_equal'; value: string }
+const FILTER_TYPES = ['select', 'status', 'checkbox']
 
 // MVP: 통합에 공유된 DB 하나를 골라 → 필드 매핑 → 구독 캘린더 생성 (PLAN §3, 이슈 #5).
 // feed URL은 문자열만 표시 — /feed/{token}.ics 라우트 실체는 #6.
@@ -28,6 +33,7 @@ export default function Setup() {
   const [end, setEnd] = useState(NONE)
   const [description, setDescription] = useState(NONE)
   const [location, setLocation] = useState(NONE)
+  const [filterRows, setFilterRows] = useState<FilterRow[]>([])
 
   useEffect(() => {
     fetch('/api/databases')
@@ -76,6 +82,7 @@ export default function Setup() {
       setEnd(NONE)
       setDescription(NONE)
       setLocation(NONE)
+      setFilterRows([])
       setProperties(properties)
     } catch (e) {
       setError((e as Error).message)
@@ -92,18 +99,49 @@ export default function Setup() {
     () => (properties ? autoDetectMapping(properties).title : undefined),
     [properties],
   )
+  // 필터 가능한 속성만(#13 상한). 없으면 필터 섹션 자체를 숨긴다.
+  const filterProps = useMemo(
+    () => (properties ?? []).filter((p) => FILTER_TYPES.includes(p.type)),
+    [properties],
+  )
+  const typeOfProp = (name: string) => properties?.find((p) => p.name === name)?.type
+
+  // 필터 행 불변 조작 헬퍼.
+  const updateRow = (i: number, patch: Partial<FilterRow>) =>
+    setFilterRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  const addRow = () =>
+    setFilterRows((rows) => [...rows, { property: '', condition: 'equals', value: '' }])
+  const removeRow = (i: number) => setFilterRows((rows) => rows.filter((_, idx) => idx !== i))
+
+  // FilterRow → CalendarFilter. property 미선택 행은 버린다. checkbox는 value를 boolean으로.
+  // 서버가 zod + validateMappingAgainstProperties로 재검증하므로 여기선 최소 조립만.
+  function buildFilters(): CalendarFilter[] {
+    return filterRows
+      // 불완전 행 드롭: select/status는 값 필수(빈 값은 서버 filterSchema value.min(1)에서 거부돼
+      // 엉뚱한 전체 mapping 400으로 표면화됨). checkbox는 value가 boolean이라 항상 유효.
+      .filter((r) => r.property && (typeOfProp(r.property) === 'checkbox' || r.value))
+      .map((r) => {
+        const type = typeOfProp(r.property)
+        if (type === 'checkbox') {
+          return { type: 'checkbox', property: r.property, value: r.value === 'true' }
+        }
+        return { type: type as 'select' | 'status', property: r.property, condition: r.condition, value: r.value }
+      })
+  }
 
   async function submit() {
     if (!titleProp || !start) return
     setSubmitting(true)
     setError(null)
     try {
+      const filters = buildFilters()
       const mapping = {
         title: titleProp,
         start,
         ...(end !== NONE ? { end } : {}),
         ...(description !== NONE ? { description } : {}),
         ...(location !== NONE ? { location } : {}),
+        ...(filters.length ? { filters } : {}),
       }
       const res = await fetch('/api/calendars', {
         method: 'POST',
@@ -281,6 +319,70 @@ export default function Setup() {
                 </select>
               </label>
             </p>
+
+            {filterProps.length > 0 && (
+              <fieldset style={{ marginTop: 16 }}>
+                <legend>필터(선택) — 조건에 맞는 항목만 노출 (여러 조건은 모두 AND)</legend>
+                {filterRows.map((row, i) => {
+                  const rowType = typeOfProp(row.property)
+                  return (
+                    <p key={i}>
+                      <select
+                        aria-label={`필터 ${i + 1} 속성`}
+                        value={row.property}
+                        onChange={(e) => {
+                          const property = e.target.value
+                          const isCheckbox = typeOfProp(property) === 'checkbox'
+                          updateRow(i, { property, value: isCheckbox ? 'true' : '' })
+                        }}
+                      >
+                        <option value="">속성 선택</option>
+                        {filterProps.map((p) => (
+                          <option key={p.name} value={p.name}>
+                            {p.name} ({p.type})
+                          </option>
+                        ))}
+                      </select>{' '}
+                      {rowType === 'checkbox' ? (
+                        <select
+                          aria-label={`필터 ${i + 1} 값`}
+                          value={row.value}
+                          onChange={(e) => updateRow(i, { value: e.target.value })}
+                        >
+                          <option value="true">체크됨</option>
+                          <option value="false">체크 안 됨</option>
+                        </select>
+                      ) : (
+                        <>
+                          <select
+                            aria-label={`필터 ${i + 1} 조건`}
+                            value={row.condition}
+                            onChange={(e) =>
+                              updateRow(i, { condition: e.target.value as FilterRow['condition'] })
+                            }
+                          >
+                            <option value="equals">=</option>
+                            <option value="does_not_equal">≠</option>
+                          </select>{' '}
+                          <input
+                            aria-label={`필터 ${i + 1} 값`}
+                            value={row.value}
+                            placeholder="값 (예: Done)"
+                            onChange={(e) => updateRow(i, { value: e.target.value })}
+                          />
+                        </>
+                      )}{' '}
+                      <button type="button" onClick={() => removeRow(i)}>
+                        삭제
+                      </button>
+                    </p>
+                  )
+                })}
+                <button type="button" onClick={addRow}>
+                  필터 추가
+                </button>
+              </fieldset>
+            )}
 
             <button onClick={submit} disabled={!start || submitting}>
               {submitting ? '생성 중…' : '캘린더 만들기'}
