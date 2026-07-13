@@ -20,7 +20,7 @@ const schema = `
   CREATE TABLE IF NOT EXISTS user (
     id TEXT PRIMARY KEY,
     notion_access_token TEXT NOT NULL,
-    notion_workspace_id TEXT NOT NULL,
+    notion_workspace_id TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS calendar (
