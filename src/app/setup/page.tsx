@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { autoDetectMapping, type NotionProperty } from '@/lib/mapping'
 
 type Database = { id: string; title: string }
+type Calendar = { id: string; feedUrl: string }
 
 const NONE = '' // "없음(-)" 옵션 값 — 선택 매핑 미지정
 
@@ -14,7 +15,8 @@ export default function Setup() {
   const [selected, setSelected] = useState<string>('')
   const [feedUrl, setFeedUrl] = useState<string | null>(null)
   const [calendarId, setCalendarId] = useState<string | null>(null)
-  const [rotating, setRotating] = useState(false)
+  const [calendars, setCalendars] = useState<Calendar[] | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null) // rotate/delete 진행 중인 항목 id
   const [error, setError] = useState<string | null>(null)
   const [needsConnect, setNeedsConnect] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -37,6 +39,21 @@ export default function Setup() {
         if (!res.ok) throw new Error('목록을 불러오지 못했습니다')
         const { databases } = (await res.json()) as { databases: Database[] }
         setDatabases(databases)
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [])
+
+  // 기존에 만든 "내 캘린더" 목록 로드 (이슈 #12). DB 목록과 병렬 — 401은 동일하게 재연결 유도.
+  useEffect(() => {
+    fetch('/api/calendars')
+      .then(async (res) => {
+        if (res.status === 401) {
+          setNeedsConnect(true)
+          return
+        }
+        if (!res.ok) throw new Error('캘린더 목록을 불러오지 못했습니다')
+        const { calendars } = (await res.json()) as { calendars: Calendar[] }
+        setCalendars(calendars)
       })
       .catch((e: Error) => setError(e.message))
   }, [])
@@ -109,24 +126,49 @@ export default function Setup() {
   }
 
   // 재발급: 기존 URL을 즉시 무효화하므로 확인을 받는다. 성공 시 새 feedUrl로 교체.
-  async function rotate() {
-    if (!calendarId) return
+  // 두 진입점(생성 직후 화면 / 목록 항목)이 동일 함수를 재사용하도록 id를 인자로 받는다(#12).
+  async function rotate(id: string) {
     if (!confirm('기존 URL은 즉시 무효화되고 새 URL이 발급됩니다. 계속할까요?')) return
-    setRotating(true)
+    setBusyId(id)
     setError(null)
     try {
-      const res = await fetch(`/api/calendars/${calendarId}/rotate`, { method: 'POST' })
+      const res = await fetch(`/api/calendars/${id}/rotate`, { method: 'POST' })
       if (res.status === 401) {
         setNeedsConnect(true)
         return
       }
       const data = (await res.json()) as { feedUrl?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? '재발급에 실패했습니다')
-      setFeedUrl(data.feedUrl ?? null)
+      const newUrl = data.feedUrl ?? null
+      if (id === calendarId) setFeedUrl(newUrl) // 생성 직후 화면
+      // 목록 항목: 해당 캘린더의 feedUrl만 불변 교체.
+      setCalendars((prev) =>
+        prev ? prev.map((c) => (c.id === id && newUrl ? { ...c, feedUrl: newUrl } : c)) : prev,
+      )
     } catch (e) {
       setError((e as Error).message)
     } finally {
-      setRotating(false)
+      setBusyId(null)
+    }
+  }
+
+  // 삭제: 구독 URL을 영구 무효화하므로 확인을 받는다. 성공(204) 시 목록에서 불변 제거(#12).
+  async function remove(id: string) {
+    if (!confirm('이 캘린더를 삭제하면 구독 URL이 영구적으로 무효화됩니다. 삭제할까요?')) return
+    setBusyId(id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/calendars/${id}`, { method: 'DELETE' })
+      if (res.status === 401) {
+        setNeedsConnect(true)
+        return
+      }
+      if (!res.ok) throw new Error('삭제에 실패했습니다')
+      setCalendars((prev) => (prev ? prev.filter((c) => c.id !== id) : prev))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -144,17 +186,20 @@ export default function Setup() {
       <main style={{ padding: 32 }}>
         <h1>구독 URL이 생성되었습니다</h1>
         <p>캘린더 앱에 아래 URL을 구독으로 추가하세요 (구독 기능은 곧 활성화됩니다).</p>
-        <input readOnly value={feedUrl} style={{ width: '100%', maxWidth: 600 }} />
+        <input aria-label="구독 URL" readOnly value={feedUrl} style={{ width: '100%', maxWidth: 600 }} />
         <p role="alert" style={{ color: 'crimson' }}>
           이 URL을 아는 사람은 인증 없이 일정 전체를 볼 수 있습니다. URL이 유출되었다면 아래에서
           재발급하세요.
         </p>
         {error && <p role="alert" style={{ color: 'crimson' }}>{error}</p>}
         {calendarId && (
-          <button onClick={rotate} disabled={rotating}>
-            {rotating ? '재발급 중…' : 'URL 재발급(기존 URL 무효화)'}
+          <button onClick={() => rotate(calendarId)} disabled={busyId === calendarId}>
+            {busyId === calendarId ? '재발급 중…' : 'URL 재발급(기존 URL 무효화)'}
           </button>
         )}
+        <p>
+          <a href="/setup">내 캘린더 목록으로</a>
+        </p>
       </main>
     )
   }
@@ -252,9 +297,34 @@ export default function Setup() {
     )
   }
 
-  // 1단계: DB 선택
+  // 1단계: 내 캘린더 목록 + 새 캘린더용 DB 선택
   return (
     <main style={{ padding: 32 }}>
+      <section>
+        <h1>내 캘린더</h1>
+        {calendars === null && !error && <p>불러오는 중…</p>}
+        {calendars !== null && calendars.length === 0 && (
+          <p>아직 만든 캘린더가 없습니다. 아래에서 새로 만들 수 있습니다.</p>
+        )}
+        {calendars !== null && calendars.length > 0 && (
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {calendars.map((cal) => (
+              <li key={cal.id} style={{ marginBottom: 16 }}>
+                <input aria-label="구독 URL" readOnly value={cal.feedUrl} style={{ width: '100%', maxWidth: 600 }} />
+                <div>
+                  <button onClick={() => rotate(cal.id)} disabled={busyId === cal.id}>
+                    {busyId === cal.id ? '처리 중…' : 'URL 재발급'}
+                  </button>{' '}
+                  <button onClick={() => remove(cal.id)} disabled={busyId === cal.id}>
+                    삭제
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <h1>캘린더로 만들 Notion DB 선택</h1>
       {error && <p role="alert" style={{ color: 'crimson' }}>{error}</p>}
       {databases === null && !error && <p>불러오는 중…</p>}

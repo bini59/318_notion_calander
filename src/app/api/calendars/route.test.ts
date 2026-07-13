@@ -5,17 +5,19 @@ const readSession = vi.fn()
 const getDecryptedTokenByUserId = vi.fn()
 const getDatabaseProperties = vi.fn()
 const createCalendar = vi.fn()
+const listCalendarsByUser = vi.fn()
 
 vi.mock('@/lib/session', () => ({ readSession }))
 vi.mock('@/lib/users', () => ({ getDecryptedTokenByUserId }))
 vi.mock('@/lib/notion', () => ({ getDatabaseProperties }))
-vi.mock('@/lib/calendars', () => ({ createCalendar }))
+vi.mock('@/lib/calendars', () => ({ createCalendar, listCalendarsByUser }))
 // mapping.ts는 순수함수 — 실제 검증 로직으로 신뢰경계를 테스트한다(모킹 안 함).
 
 let POST: typeof import('./route').POST
+let GET: typeof import('./route').GET
 
 beforeAll(async () => {
-  ;({ POST } = await import('./route'))
+  ;({ POST, GET } = await import('./route'))
 })
 
 beforeEach(() => {
@@ -23,6 +25,7 @@ beforeEach(() => {
   getDecryptedTokenByUserId.mockReset()
   getDatabaseProperties.mockReset()
   createCalendar.mockReset()
+  listCalendarsByUser.mockReset()
 })
 
 function req(body: unknown): NextRequest {
@@ -117,5 +120,27 @@ describe('POST /api/calendars', () => {
     const res = await POST(req({ databaseId: 'db1', mapping: validMapping }))
     expect(res.status).toBe(502)
     expect(createCalendar).not.toHaveBeenCalled()
+  })
+})
+
+const getReq = () => new NextRequest('http://localhost:3000/api/calendars', { method: 'GET' })
+
+describe('GET /api/calendars', () => {
+  it('returns 401 when there is no session', async () => {
+    readSession.mockReturnValue(null)
+    const res = await GET(getReq())
+    expect(res.status).toBe(401)
+    expect(listCalendarsByUser).not.toHaveBeenCalled()
+  })
+
+  it('returns only the session user calendars (owner isolation)', async () => {
+    readSession.mockReturnValue('user-1')
+    getDecryptedTokenByUserId.mockReturnValue('tok')
+    const calendars = [{ id: 'cal-1', databaseId: 'db1', feedUrl: 'https://x/feed/a.ics', mapping: validMapping }]
+    listCalendarsByUser.mockReturnValue(calendars)
+    const res = await GET(getReq())
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ calendars })
+    expect(listCalendarsByUser).toHaveBeenCalledWith('user-1')
   })
 })

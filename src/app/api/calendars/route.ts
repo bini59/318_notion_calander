@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createCalendar } from '@/lib/calendars'
+import { createCalendar, listCalendarsByUser } from '@/lib/calendars'
 import { mappingSchema, validateMappingAgainstProperties } from '@/lib/mapping'
 import { getDatabaseProperties } from '@/lib/notion'
 import { requireToken } from '@/lib/require-token'
@@ -8,6 +8,13 @@ import { requireToken } from '@/lib/require-token'
 export const dynamic = 'force-dynamic'
 
 const bodySchema = z.object({ databaseId: z.string().min(1), mapping: mappingSchema })
+
+// 소유자의 캘린더 목록 (이슈 #12). listCalendarsByUser가 WHERE user_id로 세션 유저 것만 반환.
+export function GET(req: NextRequest) {
+  const auth = requireToken(req)
+  if (auth instanceof NextResponse) return auth
+  return NextResponse.json({ calendars: listCalendarsByUser(auth.userId) })
+}
 
 export async function POST(req: NextRequest) {
   const auth = requireToken(req)
