@@ -9,7 +9,9 @@ if (typeof window !== 'undefined') {
 const schema = z.object({
   NOTION_CLIENT_ID: z.string().min(1),
   NOTION_CLIENT_SECRET: z.string().min(1),
-  TOKEN_ENC_KEY: z.string().min(1),
+  TOKEN_ENC_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i, '32바이트 hex여야 함 — 생성: openssl rand -hex 32'),
   BASE_URL: z.url(),
   DATABASE_URL: z.string().min(1),
 })
@@ -19,9 +21,16 @@ export type Env = z.infer<typeof schema>
 export function validateEnv(source: Record<string, string | undefined> = process.env): Env {
   const result = schema.safeParse(source)
   if (!result.success) {
-    const missing = [...new Set(result.error.issues.map((i) => String(i.path[0])))]
+    const problems = [
+      ...new Map(
+        result.error.issues.map((i) => {
+          const key = String(i.path[0])
+          return [key, i.code === 'invalid_type' ? key : `${key} (${i.message})`]
+        }),
+      ).values(),
+    ]
     throw new Error(
-      `Missing required environment variables: ${missing.join(', ')}. See .env.example.`,
+      `Missing or invalid environment variables: ${problems.join(', ')}. See .env.example.`,
     )
   }
   return result.data

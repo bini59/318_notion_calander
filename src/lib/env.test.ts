@@ -4,7 +4,7 @@ import { validateEnv } from './env'
 const full = {
   NOTION_CLIENT_ID: 'cid',
   NOTION_CLIENT_SECRET: 'secret',
-  TOKEN_ENC_KEY: 'enc-key',
+  TOKEN_ENC_KEY: 'ab'.repeat(32),
   BASE_URL: 'http://localhost:3000',
   DATABASE_URL: './data/app.db',
 }
@@ -20,6 +20,12 @@ describe('validateEnv', () => {
 
   it('treats empty strings as missing', () => {
     expect(() => validateEnv({ ...full, BASE_URL: '' })).toThrow(/BASE_URL/)
+  })
+
+  it('rejects a TOKEN_ENC_KEY that is not 64 hex chars, telling how to generate one', () => {
+    expect(() => validateEnv({ ...full, TOKEN_ENC_KEY: 'too-short' })).toThrow(
+      /TOKEN_ENC_KEY.*openssl rand -hex 32/,
+    )
   })
 
   it('rejects a malformed BASE_URL', () => {
