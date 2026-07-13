@@ -5,7 +5,8 @@ FROM node:22-alpine AS base
 FROM base AS deps
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
-COPY package.json package-lock.json ./
+# .npmrc 포함 — legacy-peer-deps=true (React 19 + radix/lucide peer 충돌 회피). 없으면 npm ci가 ERESOLVE로 실패.
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 # build: standalone 출력 생성
