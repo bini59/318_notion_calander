@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.gitignore
+data
+.env
+.env.*
+!.env.example
+tmp
+coverage
+graphify-out
+.claude
+*.md
+!docs/**
+Dockerfile
+.dockerignore
+docker-compose.yml

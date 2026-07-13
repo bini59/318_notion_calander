@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      # 마운트 지점으로 절대경로 고정 (.env의 상대경로 모호성 제거)
+      DATABASE_URL: /app/data/app.db
+    volumes:
+      # SQLite + WAL/SHM 영속화. 명명 볼륨 — 컨테이너의 non-root(node) 소유권을
+      # 그대로 seed하므로 bind mount의 root 소유 권한 충돌(SQLITE_CANTOPEN) 없음.
+      - data:/app/data
+    restart: unless-stopped
+
+volumes:
+  data:
