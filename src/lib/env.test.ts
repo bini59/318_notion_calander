@@ -15,8 +15,7 @@ describe('validateEnv', () => {
   })
 
   it('throws naming the missing variable', () => {
-    const { TOKEN_ENC_KEY: _, ...rest } = full
-    expect(() => validateEnv(rest)).toThrow(/TOKEN_ENC_KEY/)
+    expect(() => validateEnv({ ...full, TOKEN_ENC_KEY: undefined })).toThrow(/TOKEN_ENC_KEY/)
   })
 
   it('treats empty strings as missing', () => {
