@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 let crypto: typeof import('./crypto')
 
@@ -30,6 +30,18 @@ describe('encrypt / decrypt', () => {
 
   it('rejects garbage payloads', () => {
     expect(() => crypto.decrypt('not-a-payload')).toThrow()
+  })
+
+  it('rejects payloads with extra segments', () => {
+    expect(() => crypto.decrypt(crypto.encrypt('secret') + '.garbage')).toThrow(/payload format/)
+  })
+
+  it('fails to decrypt under a different key', async () => {
+    const payload = crypto.encrypt('secret')
+    vi.resetModules()
+    process.env.TOKEN_ENC_KEY = 'cd'.repeat(32)
+    const other = await import('./crypto')
+    expect(() => other.decrypt(payload)).toThrow()
   })
 })
 
