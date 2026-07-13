@@ -2,16 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { autoDetectMapping, type CalendarFilter, type NotionProperty } from '@/lib/mapping'
+import FilterRow, { type FilterRow as FilterRowData } from './FilterRow'
 
 type Database = { id: string; title: string }
 type Calendar = { id: string; feedUrl: string }
+// relation(#16) 값 드롭다운 원본: 관련 DB 페이지 목록의 로딩/에러/결과를 property 이름별로 캐시.
+type RelationState = { loading?: boolean; error?: string; options?: { id: string; title: string }[] }
 
 const NONE = '' // "없음(-)" 옵션 값 — 선택 매핑 미지정
 
-// 필터(#13) UI 행. property는 이름, type은 property에서 파생. condition/value는 서버 상한과 동일.
-// value는 문자열 보관(checkbox는 'true'/'false') → submit에서 CalendarFilter로 변환.
-type FilterRow = { property: string; condition: 'equals' | 'does_not_equal'; value: string }
-const FILTER_TYPES = ['select', 'status', 'checkbox']
+// 필터(#13/#16) 가능한 property 타입. relation(#16)은 이름 드롭다운을 별도 엔드포인트로 로딩한다.
+const FILTER_TYPES = ['select', 'status', 'checkbox', 'relation']
 
 // MVP: 통합에 공유된 DB 하나를 골라 → 필드 매핑 → 구독 캘린더 생성 (PLAN §3, 이슈 #5).
 // feed URL은 문자열만 표시 — /feed/{token}.ics 라우트 실체는 #6.
@@ -33,7 +34,9 @@ export default function Setup() {
   const [end, setEnd] = useState(NONE)
   const [description, setDescription] = useState(NONE)
   const [location, setLocation] = useState(NONE)
-  const [filterRows, setFilterRows] = useState<FilterRow[]>([])
+  const [filterRows, setFilterRows] = useState<FilterRowData[]>([])
+  // relation 옵션 캐시(#16): property 이름 → 로딩/에러/결과. 행이 relation으로 바뀌면 1회 fetch.
+  const [relationState, setRelationState] = useState<Record<string, RelationState>>({})
 
   useEffect(() => {
     fetch('/api/databases')
@@ -83,6 +86,7 @@ export default function Setup() {
       setDescription(NONE)
       setLocation(NONE)
       setFilterRows([])
+      setRelationState({})
       setProperties(properties)
     } catch (e) {
       setError((e as Error).message)
@@ -109,11 +113,35 @@ export default function Setup() {
   const optionsOfProp = (name: string) => properties?.find((p) => p.name === name)?.options
 
   // 필터 행 불변 조작 헬퍼.
-  const updateRow = (i: number, patch: Partial<FilterRow>) =>
+  const updateRow = (i: number, patch: Partial<FilterRowData>) =>
     setFilterRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
   const addRow = () =>
     setFilterRows((rows) => [...rows, { property: '', condition: 'equals', value: '' }])
   const removeRow = (i: number) => setFilterRows((rows) => rows.filter((_, idx) => idx !== i))
+
+  // relation 행(#16)의 관련 페이지 이름 옵션을 property별로 1회 로딩·캐시한다. 신뢰경계: 클라는 관련
+  // DB id를 넘기지 않고 (선택 DB, property)만 보내며 서버가 relatedDatabaseId를 재도출한다.
+  // relationState[name]이 이미 있으면(로딩/성공/에러) 재요청하지 않아 루프를 막는다.
+  useEffect(() => {
+    const names = [
+      ...new Set(
+        filterRows.map((r) => r.property).filter((n) => n && typeOfProp(n) === 'relation'),
+      ),
+    ]
+    names.forEach((name) => {
+      if (relationState[name]) return
+      setRelationState((s) => ({ ...s, [name]: { loading: true } }))
+      fetch(`/api/databases/${selected}/relation-options?property=${encodeURIComponent(name)}`)
+        .then(async (res) => {
+          if (!res.ok) throw new Error('관련 페이지 목록을 불러오지 못했습니다')
+          const { options } = (await res.json()) as { options: { id: string; title: string }[] }
+          setRelationState((s) => ({ ...s, [name]: { options } }))
+        })
+        .catch((e: Error) => setRelationState((s) => ({ ...s, [name]: { error: e.message } })))
+    })
+    // relationState는 가드용으로만 읽어 deps에서 제외(넣으면 매 set마다 재실행). filterRows/selected 변화에만 반응.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterRows, selected])
 
   // FilterRow → CalendarFilter. property 미선택 행은 버린다. checkbox는 value를 boolean으로.
   // 서버가 zod + validateMappingAgainstProperties로 재검증하므로 여기선 최소 조립만.
@@ -121,13 +149,36 @@ export default function Setup() {
     return filterRows
       // 불완전 행 드롭: select/status는 값 필수(빈 값은 서버 filterSchema value.min(1)에서 거부돼
       // 엉뚱한 전체 mapping 400으로 표면화됨). checkbox는 value가 boolean이라 항상 유효.
-      .filter((r) => r.property && (typeOfProp(r.property) === 'checkbox' || r.value))
+      // relation(#16)은 is_empty/is_not_empty만 값 없이 유효, contains/does_not_contain은 값 필수.
+      .filter((r) => {
+        if (!r.property) return false
+        const type = typeOfProp(r.property)
+        if (type === 'checkbox') return true
+        if (type === 'relation') {
+          return r.condition === 'is_empty' || r.condition === 'is_not_empty' || !!r.value
+        }
+        return !!r.value // select/status
+      })
       .map((r) => {
         const type = typeOfProp(r.property)
         if (type === 'checkbox') {
           return { type: 'checkbox', property: r.property, value: r.value === 'true' }
         }
-        return { type: type as 'select' | 'status', property: r.property, condition: r.condition, value: r.value }
+        if (type === 'relation') {
+          const noValue = r.condition === 'is_empty' || r.condition === 'is_not_empty'
+          return {
+            type: 'relation',
+            property: r.property,
+            condition: r.condition as 'contains' | 'does_not_contain' | 'is_empty' | 'is_not_empty',
+            ...(noValue ? {} : { value: r.value }),
+          }
+        }
+        return {
+          type: type as 'select' | 'status',
+          property: r.property,
+          condition: r.condition as 'equals' | 'does_not_equal',
+          value: r.value,
+        }
       })
   }
 
@@ -325,76 +376,19 @@ export default function Setup() {
             {filterProps.length > 0 && (
               <fieldset style={{ marginTop: 16 }}>
                 <legend>필터(선택) — 조건에 맞는 항목만 노출 (여러 조건은 모두 AND)</legend>
-                {filterRows.map((row, i) => {
-                  const rowType = typeOfProp(row.property)
-                  return (
-                    <p key={i}>
-                      <select
-                        aria-label={`필터 ${i + 1} 속성`}
-                        value={row.property}
-                        onChange={(e) => {
-                          const property = e.target.value
-                          const isCheckbox = typeOfProp(property) === 'checkbox'
-                          updateRow(i, { property, value: isCheckbox ? 'true' : '' })
-                        }}
-                      >
-                        <option value="">속성 선택</option>
-                        {filterProps.map((p) => (
-                          <option key={p.name} value={p.name}>
-                            {p.name} ({p.type})
-                          </option>
-                        ))}
-                      </select>{' '}
-                      {rowType === 'checkbox' ? (
-                        <select
-                          aria-label={`필터 ${i + 1} 값`}
-                          value={row.value}
-                          onChange={(e) => updateRow(i, { value: e.target.value })}
-                        >
-                          <option value="true">체크됨</option>
-                          <option value="false">체크 안 됨</option>
-                        </select>
-                      ) : (
-                        <>
-                          <select
-                            aria-label={`필터 ${i + 1} 조건`}
-                            value={row.condition}
-                            onChange={(e) =>
-                              updateRow(i, { condition: e.target.value as FilterRow['condition'] })
-                            }
-                          >
-                            <option value="equals">=</option>
-                            <option value="does_not_equal">≠</option>
-                          </select>{' '}
-                          {optionsOfProp(row.property)?.length ? (
-                            <select
-                              aria-label={`필터 ${i + 1} 값`}
-                              value={row.value}
-                              onChange={(e) => updateRow(i, { value: e.target.value })}
-                            >
-                              <option value="">값 선택</option>
-                              {optionsOfProp(row.property)!.map((o) => (
-                                <option key={o.name} value={o.name}>
-                                  {o.name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              aria-label={`필터 ${i + 1} 값`}
-                              value={row.value}
-                              placeholder="값 (예: Done)"
-                              onChange={(e) => updateRow(i, { value: e.target.value })}
-                            />
-                          )}
-                        </>
-                      )}{' '}
-                      <button type="button" onClick={() => removeRow(i)}>
-                        삭제
-                      </button>
-                    </p>
-                  )
-                })}
+                {filterRows.map((row, i) => (
+                  <FilterRow
+                    key={i}
+                    row={row}
+                    index={i}
+                    filterProps={filterProps}
+                    typeOfProp={typeOfProp}
+                    optionsOfProp={optionsOfProp}
+                    relationOptions={relationState[row.property]}
+                    onUpdate={updateRow}
+                    onRemove={removeRow}
+                  />
+                ))}
                 <button type="button" onClick={addRow}>
                   필터 추가
                 </button>

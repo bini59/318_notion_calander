@@ -77,6 +77,45 @@ describe('mappingSchema', () => {
     })
     expect(parsed.success).toBe(false)
   })
+
+  it('accepts all four relation conditions (#16)', () => {
+    for (const condition of ['contains', 'does_not_contain'] as const) {
+      const parsed = mappingSchema.safeParse({
+        title: 'Name',
+        start: 'When',
+        filters: [{ type: 'relation', property: 'Project', condition, value: 'page-uuid' }],
+      })
+      expect(parsed.success).toBe(true)
+    }
+    for (const condition of ['is_empty', 'is_not_empty'] as const) {
+      const parsed = mappingSchema.safeParse({
+        title: 'Name',
+        start: 'When',
+        filters: [{ type: 'relation', property: 'Project', condition }],
+      })
+      expect(parsed.success).toBe(true)
+    }
+  })
+
+  it('rejects relation contains/does_not_contain without a value (refine)', () => {
+    for (const condition of ['contains', 'does_not_contain'] as const) {
+      const parsed = mappingSchema.safeParse({
+        title: 'Name',
+        start: 'When',
+        filters: [{ type: 'relation', property: 'Project', condition }],
+      })
+      expect(parsed.success).toBe(false)
+    }
+  })
+
+  it('rejects an unsupported relation condition (equals not allowed)', () => {
+    const parsed = mappingSchema.safeParse({
+      title: 'Name',
+      start: 'When',
+      filters: [{ type: 'relation', property: 'Project', condition: 'equals', value: 'x' }],
+    })
+    expect(parsed.success).toBe(false)
+  })
 })
 
 describe('autoDetectMapping', () => {
