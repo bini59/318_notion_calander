@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { generateFeedToken } from './crypto'
 import { db } from './db'
 import { getEnv } from './env'
+import { invalidateFeed } from './feed-cache'
 import type { CalendarMapping } from './mapping'
 
 // 선택된 Notion DB를 구독 캘린더로 등록. Notion이 원본이므로 이벤트는 저장하지 않고
@@ -40,10 +41,19 @@ export function rotateFeedToken(
   //           실제 충돌이 관측되면(사실상 불가) 여기에 재시도 상한을 건다.
   const token = generateFeedToken()
 
+  // 옛 토큰을 UPDATE 전에 확보 — 피드 캐시(#11)를 무효화하려면 그 값이 필요하다.
+  // UPDATE는 id+user_id 기준이라 옛 feed_token을 반환하지 않으므로 소유권 조건 동일하게 SELECT.
+  const old = db
+    .prepare('SELECT feed_token AS feedToken FROM calendar WHERE id = ? AND user_id = ?')
+    .get(calendarId, userId) as { feedToken: string } | undefined
+
   const { changes } = db
     .prepare('UPDATE calendar SET feed_token = ? WHERE id = ? AND user_id = ?')
     .run(token, calendarId, userId)
   if (changes === 0) return undefined
+
+  // 폐기된 옛 토큰의 캐시를 즉시 제거 — 안 하면 폐기된 URL이 최대 5분간 stale .ics 서빙(#8 회귀).
+  if (old) invalidateFeed(old.feedToken)
 
   return { feedUrl: feedUrl(token) }
 }

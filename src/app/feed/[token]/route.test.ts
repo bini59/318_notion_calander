@@ -1,4 +1,5 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { invalidateFeed } from '@/lib/feed-cache'
 
 const getCalendarByFeedToken = vi.fn()
 const getDecryptedTokenByUserId = vi.fn()
@@ -7,6 +8,7 @@ const queryDatabase = vi.fn()
 vi.mock('@/lib/calendars', () => ({ getCalendarByFeedToken }))
 vi.mock('@/lib/users', () => ({ getDecryptedTokenByUserId }))
 vi.mock('@/lib/notion', () => ({ queryDatabase }))
+// feed-cache는 실제 모듈 — 캐시 hit/miss가 queryDatabase 호출횟수로 관측되게 태운다(#11).
 // events.ts / ics.ts는 순수함수 — 실제 로직으로 직렬화 계약을 태운다(모킹 안 함).
 
 let GET: typeof import('./route').GET
@@ -62,5 +64,50 @@ describe('GET /feed/[token].ics', () => {
     const body = await res.text()
     expect(body).toContain('BEGIN:VCALENDAR')
     expect(body).toContain('UID:pg1')
+  })
+})
+
+describe('GET /feed/[token].ics — 5분 캐시 (#11)', () => {
+  // 모듈 스코프 캐시 + Date.now() 기반 TTL → fake timer + 테스트별 고유 토큰으로 격리.
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    getCalendarByFeedToken.mockReturnValue(calendar)
+    getDecryptedTokenByUserId.mockReturnValue('tok')
+    queryDatabase.mockResolvedValue([page])
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('첫 요청 miss → Notion 조회, 5분 내 재요청 hit → 재조회 안 함', async () => {
+    invalidateFeed('cache1')
+    await GET(new Request('http://x/feed/cache1.ics'), params('cache1.ics'))
+    expect(queryDatabase).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(299_000) // 5분 이내
+    const hit = await GET(new Request('http://x/feed/cache1.ics'), params('cache1.ics'))
+    expect(queryDatabase).toHaveBeenCalledTimes(1) // 캐시 hit — Notion 미조회
+    expect(await hit.text()).toContain('UID:pg1')
+  })
+
+  it('TTL(5분) 경과 후 재요청은 다시 Notion 조회', async () => {
+    invalidateFeed('cache2')
+    await GET(new Request('http://x/feed/cache2.ics'), params('cache2.ics'))
+    vi.advanceTimersByTime(300_001) // 만료
+    await GET(new Request('http://x/feed/cache2.ics'), params('cache2.ics'))
+    expect(queryDatabase).toHaveBeenCalledTimes(2)
+  })
+
+  it('502(Notion 실패)는 캐시하지 않음 — 다음 요청도 재조회', async () => {
+    invalidateFeed('cache3')
+    queryDatabase.mockRejectedValueOnce(new Error('Notion query failed: 429'))
+    const fail = await GET(new Request('http://x/feed/cache3.ics'), params('cache3.ics'))
+    expect(fail.status).toBe(502)
+
+    queryDatabase.mockResolvedValue([page])
+    const ok = await GET(new Request('http://x/feed/cache3.ics'), params('cache3.ics'))
+    expect(ok.status).toBe(200)
+    expect(queryDatabase).toHaveBeenCalledTimes(2) // 502가 캐시됐다면 2회가 아니었을 것
   })
 })
