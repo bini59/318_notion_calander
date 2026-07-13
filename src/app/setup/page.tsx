@@ -2,7 +2,21 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { autoDetectMapping, type CalendarFilter, type NotionProperty } from '@/lib/mapping'
-import FilterRow, { type FilterRow as FilterRowData } from './FilterRow'
+import { FilterSection, type FilterRow as FilterRowData } from './FilterRow'
+import Stepper from './Stepper'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 type Database = { id: string; title: string }
 type Calendar = { id: string; feedUrl: string }
@@ -10,6 +24,8 @@ type Calendar = { id: string; feedUrl: string }
 type RelationState = { loading?: boolean; error?: string; options?: { id: string; title: string }[] }
 
 const NONE = '' // "없음(-)" 옵션 값 — 선택 매핑 미지정
+// Radix Select는 빈 문자열 value의 SelectItem을 금지 → "없음"에 센티넬을 쓰고 state는 NONE('') 유지.
+const NONE_OPT = '__none__'
 
 // 필터(#13/#16) 가능한 property 타입. relation(#16)은 이름 드롭다운을 별도 엔드포인트로 로딩한다.
 const FILTER_TYPES = ['select', 'status', 'checkbox', 'relation']
@@ -271,201 +287,274 @@ export default function Setup() {
     }
   }
 
+  // 선택 매핑용 "없음" 센티넬 ↔ NONE('') 변환 Select. state는 NONE 유지 → payload 로직 불변.
+  const noneSelectValue = (v: string) => (v === NONE ? NONE_OPT : v)
+  const fromNoneSelect = (v: string) => (v === NONE_OPT ? NONE : v)
+
   if (needsConnect) {
     return (
-      <main style={{ padding: 32 }}>
-        <p>Notion이 연결되지 않았습니다.</p>
-        <a href="/api/auth/notion">Notion 연결하기</a>
-      </main>
+      <Shell current={1}>
+        <div className="rounded-lg border border-border bg-card p-6 text-center">
+          <p className="mb-4 text-sm text-muted-foreground">Notion이 연결되지 않았습니다.</p>
+          <Button asChild>
+            <a href="/api/auth/notion">Notion 연결하기</a>
+          </Button>
+        </div>
+      </Shell>
     )
   }
 
   if (feedUrl) {
     return (
-      <main style={{ padding: 32 }}>
-        <h1>구독 URL이 생성되었습니다</h1>
-        <p>캘린더 앱에 아래 URL을 구독으로 추가하세요 (구독 기능은 곧 활성화됩니다).</p>
-        <input aria-label="구독 URL" readOnly value={feedUrl} style={{ width: '100%', maxWidth: 600 }} />
-        <p role="alert" style={{ color: 'crimson' }}>
+      <Shell current={3}>
+        <h1 className="mb-2 text-xl font-semibold">구독 URL이 생성되었습니다</h1>
+        <p className="mb-4 text-sm text-muted-foreground">
+          캘린더 앱에 아래 URL을 구독으로 추가하세요 (구독 기능은 곧 활성화됩니다).
+        </p>
+        <Input aria-label="구독 URL" readOnly value={feedUrl} className="mb-3 font-mono text-xs" />
+        <p role="alert" className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
           이 URL을 아는 사람은 인증 없이 일정 전체를 볼 수 있습니다. URL이 유출되었다면 아래에서
           재발급하세요.
         </p>
-        {error && <p role="alert" style={{ color: 'crimson' }}>{error}</p>}
-        {calendarId && (
-          <button onClick={() => rotate(calendarId)} disabled={busyId === calendarId}>
-            {busyId === calendarId ? '재발급 중…' : 'URL 재발급(기존 URL 무효화)'}
-          </button>
+        {error && (
+          <p role="alert" className="mb-4 text-sm text-destructive">
+            {error}
+          </p>
         )}
-        <p>
-          <a href="/setup">내 캘린더 목록으로</a>
+        {calendarId && (
+          <Button
+            variant="outline"
+            onClick={() => rotate(calendarId)}
+            disabled={busyId === calendarId}
+          >
+            {busyId === calendarId ? '재발급 중…' : 'URL 재발급(기존 URL 무효화)'}
+          </Button>
+        )}
+        <p className="mt-6">
+          <a href="/setup" className="text-sm underline underline-offset-4">
+            내 캘린더 목록으로
+          </a>
         </p>
-      </main>
+      </Shell>
     )
   }
 
   // 2단계: 필드 매핑
   if (properties !== null) {
     return (
-      <main style={{ padding: 32 }}>
-        <h1>필드 매핑</h1>
-        {error && <p role="alert" style={{ color: 'crimson' }}>{error}</p>}
+      <Shell current={2}>
+        <h1 className="mb-6 text-xl font-semibold">필드 매핑</h1>
+        {error && (
+          <p role="alert" className="mb-4 text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
         {dateProps.length === 0 ? (
-          <p role="alert">
+          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
             이 DB에는 날짜(date) 속성이 없어 캘린더로 만들 수 없습니다. Notion에서 날짜 속성을 추가한
             뒤 다시 시도하세요.
           </p>
         ) : !titleProp ? (
-          <p role="alert">이 DB에는 제목(title) 속성이 없어 캘린더로 만들 수 없습니다.</p>
+          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            이 DB에는 제목(title) 속성이 없어 캘린더로 만들 수 없습니다.
+          </p>
         ) : (
           <>
-            <p>
-              <label>
-                제목(SUMMARY): <strong>{titleProp}</strong>
-                {/* title은 DB당 1개 → 자동 감지, 변경 불가 */}
-              </label>
-            </p>
+            {/* 필수 그룹 */}
+            <fieldset className="space-y-4">
+              <legend className="mb-3 flex items-center gap-2 text-sm font-medium">
+                필수 필드 <Badge>필수</Badge>
+              </legend>
 
-            <p>
-              <label>
-                시작일(필수):{' '}
-                <select value={start} onChange={(e) => setStart(e.target.value)} disabled={dateProps.length === 1}>
-                  {dateProps.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </p>
+              <MappingField ical="제목 (SUMMARY)">
+                <div className="flex items-center gap-2">
+                  {/* title은 DB당 1개 → 자동 감지, 변경 불가 */}
+                  <span className="text-sm font-medium">{titleProp}</span>
+                  <Badge>필수</Badge>
+                </div>
+              </MappingField>
 
-            <p>
-              <label>
-                종료일(선택, 별도 date 속성):{' '}
-                <select value={end} onChange={(e) => setEnd(e.target.value)}>
-                  <option value={NONE}>없음(-)</option>
-                  {dateProps.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </p>
-
-            <fieldset style={{ marginTop: 8 }}>
-              <legend>설명(선택)</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="descriptionSource"
-                  value="property"
-                  checked={descriptionSource === 'property'}
-                  onChange={() => setDescriptionSource('property')}
-                />{' '}
-                속성에서
-              </label>{' '}
-              <label>
-                <input
-                  type="radio"
-                  name="descriptionSource"
-                  value="body"
-                  checked={descriptionSource === 'body'}
-                  onChange={() => setDescriptionSource('body')}
-                />{' '}
-                페이지 본문에서
-              </label>
-              {descriptionSource === 'property' ? (
-                <p>
-                  <label>
-                    속성:{' '}
-                    <select value={description} onChange={(e) => setDescription(e.target.value)}>
-                      <option value={NONE}>없음(-)</option>
-                      {properties.map((p) => (
-                        <option key={p.name} value={p.name}>
+              <MappingField ical="시작일 (DTSTART)">
+                <div className="flex items-center gap-2">
+                  <Select value={start} onValueChange={setStart} disabled={dateProps.length === 1}>
+                    <SelectTrigger aria-label="시작일 속성" className="w-full">
+                      <SelectValue placeholder="date 속성 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {dateProps.map((p) => (
+                        <SelectItem key={p.name} value={p.name}>
                           {p.name}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </select>
-                  </label>
-                </p>
-              ) : (
-                <p>페이지 본문의 앞부분(최대 몇 블록)을 설명으로 사용합니다.</p>
-              )}
+                    </SelectContent>
+                  </Select>
+                  <Badge>필수</Badge>
+                </div>
+              </MappingField>
             </fieldset>
 
-            <p>
-              <label>
-                장소(선택):{' '}
-                <select value={location} onChange={(e) => setLocation(e.target.value)}>
-                  <option value={NONE}>없음(-)</option>
-                  {properties.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </p>
+            <Separator className="my-6" />
+
+            {/* 선택 그룹 */}
+            <fieldset className="space-y-4">
+              <legend className="mb-3 flex items-center gap-2 text-sm font-medium">
+                선택 필드 <Badge variant="secondary">선택</Badge>
+              </legend>
+
+              <MappingField ical="종료일 (DTEND)">
+                <Select
+                  value={noneSelectValue(end)}
+                  onValueChange={(v) => setEnd(fromNoneSelect(v))}
+                >
+                  <SelectTrigger aria-label="종료일 속성" className="w-full">
+                    <SelectValue placeholder="없음" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_OPT}>없음(-)</SelectItem>
+                    {dateProps.map((p) => (
+                      <SelectItem key={p.name} value={p.name}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </MappingField>
+
+              <MappingField ical="설명 (DESCRIPTION)">
+                <div className="space-y-3">
+                  <ToggleGroup
+                    type="single"
+                    value={descriptionSource}
+                    onValueChange={(v) => v && setDescriptionSource(v as 'property' | 'body')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <ToggleGroupItem value="property" className="flex-1">
+                      속성에서
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="body" className="flex-1">
+                      페이지 본문에서
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                  {descriptionSource === 'property' ? (
+                    <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                      <Select
+                        value={noneSelectValue(description)}
+                        onValueChange={(v) => setDescription(fromNoneSelect(v))}
+                      >
+                        <SelectTrigger aria-label="설명 속성" className="w-full">
+                          <SelectValue placeholder="없음" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NONE_OPT}>없음(-)</SelectItem>
+                          {properties.map((p) => (
+                            <SelectItem key={p.name} value={p.name}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      페이지 본문의 앞부분(최대 몇 블록)을 설명으로 사용합니다.
+                    </p>
+                  )}
+                </div>
+              </MappingField>
+
+              <MappingField ical="장소 (LOCATION)">
+                <Select
+                  value={noneSelectValue(location)}
+                  onValueChange={(v) => setLocation(fromNoneSelect(v))}
+                >
+                  <SelectTrigger aria-label="장소 속성" className="w-full">
+                    <SelectValue placeholder="없음" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_OPT}>없음(-)</SelectItem>
+                    {properties.map((p) => (
+                      <SelectItem key={p.name} value={p.name}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </MappingField>
+            </fieldset>
 
             {filterProps.length > 0 && (
-              <fieldset style={{ marginTop: 16 }}>
-                <legend>필터(선택) — 조건에 맞는 항목만 노출 (여러 조건은 모두 AND)</legend>
-                {filterRows.map((row, i) => (
-                  <FilterRow
-                    key={i}
-                    row={row}
-                    index={i}
-                    filterProps={filterProps}
-                    typeOfProp={typeOfProp}
-                    optionsOfProp={optionsOfProp}
-                    relationOptions={relationState[row.property]}
-                    onUpdate={updateRow}
-                    onRemove={removeRow}
-                  />
-                ))}
-                <button type="button" onClick={addRow}>
-                  필터 추가
-                </button>
-              </fieldset>
+              <>
+                <Separator className="my-6" />
+                <FilterSection
+                  rows={filterRows}
+                  filterProps={filterProps}
+                  typeOfProp={typeOfProp}
+                  optionsOfProp={optionsOfProp}
+                  relationState={relationState}
+                  onUpdate={updateRow}
+                  onAdd={addRow}
+                  onRemove={removeRow}
+                />
+              </>
             )}
-
-            <button onClick={submit} disabled={!start || submitting}>
-              {submitting ? '생성 중…' : '캘린더 만들기'}
-            </button>
           </>
         )}
 
-        <p>
-          <button onClick={() => setProperties(null)} disabled={submitting}>
+        {/* sticky 푸터 바 */}
+        <div className="sticky bottom-0 -mx-6 mt-8 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <Button variant="ghost" onClick={() => setProperties(null)} disabled={submitting}>
             뒤로
-          </button>
-        </p>
-      </main>
+          </Button>
+          {titleProp && dateProps.length > 0 && (
+            <Button onClick={submit} disabled={!start || submitting}>
+              {submitting ? '생성 중…' : '캘린더 만들기'}
+            </Button>
+          )}
+        </div>
+      </Shell>
     )
   }
 
   // 1단계: 내 캘린더 목록 + 새 캘린더용 DB 선택
   return (
-    <main style={{ padding: 32 }}>
-      <section>
-        <h1>내 캘린더</h1>
-        {calendars === null && !error && <p>불러오는 중…</p>}
+    <Shell current={1}>
+      <section className="mb-10">
+        <h1 className="mb-4 text-xl font-semibold">내 캘린더</h1>
+        {calendars === null && !error && <p className="text-sm text-muted-foreground">불러오는 중…</p>}
         {calendars !== null && calendars.length === 0 && (
-          <p>아직 만든 캘린더가 없습니다. 아래에서 새로 만들 수 있습니다.</p>
+          <p className="text-sm text-muted-foreground">
+            아직 만든 캘린더가 없습니다. 아래에서 새로 만들 수 있습니다.
+          </p>
         )}
         {calendars !== null && calendars.length > 0 && (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
+          <ul className="space-y-4">
             {calendars.map((cal) => (
-              <li key={cal.id} style={{ marginBottom: 16 }}>
-                <input aria-label="구독 URL" readOnly value={cal.feedUrl} style={{ width: '100%', maxWidth: 600 }} />
-                <div>
-                  <button onClick={() => rotate(cal.id)} disabled={busyId === cal.id}>
+              <li key={cal.id} className="rounded-lg border border-border bg-card p-4">
+                <Input
+                  aria-label="구독 URL"
+                  readOnly
+                  value={cal.feedUrl}
+                  className="mb-3 font-mono text-xs"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => rotate(cal.id)}
+                    disabled={busyId === cal.id}
+                  >
                     {busyId === cal.id ? '처리 중…' : 'URL 재발급'}
-                  </button>{' '}
-                  <button onClick={() => remove(cal.id)} disabled={busyId === cal.id}>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => remove(cal.id)}
+                    disabled={busyId === cal.id}
+                  >
                     삭제
-                  </button>
+                  </Button>
                 </div>
               </li>
             ))}
@@ -473,35 +562,72 @@ export default function Setup() {
         )}
       </section>
 
-      <h1>캘린더로 만들 Notion DB 선택</h1>
-      {error && <p role="alert" style={{ color: 'crimson' }}>{error}</p>}
-      {databases === null && !error && <p>불러오는 중…</p>}
+      <h1 className="mb-4 text-xl font-semibold">캘린더로 만들 Notion DB 선택</h1>
+      {error && (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {databases === null && !error && <p className="text-sm text-muted-foreground">불러오는 중…</p>}
       {databases !== null && databases.length === 0 && (
-        <p>공유된 DB가 없습니다. Notion에서 통합에 DB를 공유한 뒤 새로고침하세요.</p>
+        <p className="text-sm text-muted-foreground">
+          공유된 DB가 없습니다. Notion에서 통합에 DB를 공유한 뒤 새로고침하세요.
+        </p>
       )}
       {databases !== null && databases.length > 0 && (
         <>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
+          <ul className="mb-6 space-y-2" role="radiogroup" aria-label="Notion DB 선택">
             {databases.map((db) => (
               <li key={db.id}>
-                <label>
+                <label
+                  className={
+                    'flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition-colors ' +
+                    (selected === db.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:bg-muted')
+                  }
+                >
                   <input
                     type="radio"
                     name="database"
                     value={db.id}
                     checked={selected === db.id}
                     onChange={() => setSelected(db.id)}
-                  />{' '}
+                    className="accent-primary"
+                  />
                   {db.title || '(제목 없음)'}
                 </label>
               </li>
             ))}
           </ul>
-          <button onClick={loadProperties} disabled={!selected || loadingProps}>
+          <Button onClick={loadProperties} disabled={!selected || loadingProps}>
             {loadingProps ? '불러오는 중…' : '다음'}
-          </button>
+          </Button>
         </>
       )}
+    </Shell>
+  )
+}
+
+// max-width 640 중앙 컨테이너 + 상단 Stepper. 뷰마다 감싸는 공통 셸.
+function Shell({ current, children }: { current: 1 | 2 | 3; children: React.ReactNode }) {
+  return (
+    <main className="mx-auto w-full max-w-[640px] px-6 py-10">
+      <Stepper current={current} />
+      {children}
     </main>
+  )
+}
+
+// iCal 필드(좌 라벨) ← Notion 속성(우 컨트롤) 2컬럼 행 + 방향 커넥터. 모바일에서 스택.
+function MappingField({ ical, children }: { ical: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,9rem)_auto_1fr] sm:gap-3">
+      <Label className="text-sm text-muted-foreground">{ical}</Label>
+      <span className="hidden text-muted-foreground sm:inline" aria-hidden>
+        ←
+      </span>
+      <div>{children}</div>
+    </div>
   )
 }
