@@ -73,6 +73,33 @@ describe('searchDatabases pagination', () => {
   })
 })
 
+describe('queryDatabase pagination', () => {
+  const pageStub = (id: string) => ({ id, url: `https://notion.so/${id}`, properties: {} })
+
+  it('merges results across pages until has_more is false (100 + 30 = 130)', async () => {
+    const first = Array.from({ length: 100 }, (_, i) => pageStub(`p${i}`))
+    const second = Array.from({ length: 30 }, (_, i) => pageStub(`q${i}`))
+    fetchMock
+      .mockResolvedValueOnce(ok({ results: first, has_more: true, next_cursor: 'cursor-2' }))
+      .mockResolvedValueOnce(ok({ results: second, has_more: false, next_cursor: null }))
+
+    const pages = await notion.queryDatabase('tok', 'db1')
+
+    expect(pages).toHaveLength(130)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // 첫 호출엔 start_cursor 없음, 2번째 호출은 첫 응답의 next_cursor를 실어야 한다.
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).start_cursor).toBeUndefined()
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).start_cursor).toBe('cursor-2')
+    // POST /databases/{id}/query (search와 다른 엔드포인트).
+    expect(fetchMock.mock.calls[0][0]).toContain('/databases/db1/query')
+  })
+
+  it('throws with status only (no body leak) on non-2xx', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) })
+    await expect(notion.queryDatabase('tok', 'db1')).rejects.toThrow('429')
+  })
+})
+
 describe('getDatabaseProperties', () => {
   it('flattens the Notion properties object into a (name, type) list', async () => {
     fetchMock.mockResolvedValueOnce(
