@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { autoDetectMapping, type NotionProperty } from '@/lib/mapping'
 
 type Database = { id: string; title: string }
 
-// MVP: 통합에 공유된 DB 하나를 골라 구독 캘린더를 만든다 (PLAN §3).
-// feed URL은 문자열만 표시 — /feed/{token}.ics 라우트 실체는 #5.
+const NONE = '' // "없음(-)" 옵션 값 — 선택 매핑 미지정
+
+// MVP: 통합에 공유된 DB 하나를 골라 → 필드 매핑 → 구독 캘린더 생성 (PLAN §3, 이슈 #5).
+// feed URL은 문자열만 표시 — /feed/{token}.ics 라우트 실체는 #6.
 export default function Setup() {
   const [databases, setDatabases] = useState<Database[] | null>(null)
   const [selected, setSelected] = useState<string>('')
@@ -13,6 +16,14 @@ export default function Setup() {
   const [error, setError] = useState<string | null>(null)
   const [needsConnect, setNeedsConnect] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // 매핑 단계 상태 — properties가 로드되면 매핑 폼으로 전환.
+  const [properties, setProperties] = useState<NotionProperty[] | null>(null)
+  const [loadingProps, setLoadingProps] = useState(false)
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState(NONE)
+  const [description, setDescription] = useState(NONE)
+  const [location, setLocation] = useState(NONE)
 
   useEffect(() => {
     fetch('/api/databases')
@@ -28,16 +39,62 @@ export default function Setup() {
       .catch((e: Error) => setError(e.message))
   }, [])
 
-  async function submit() {
+  // ponytail: N+1 회피 — properties는 사용자가 고른 DB 하나만 이 시점에 1회 조회.
+  async function loadProperties() {
     if (!selected) return
+    setLoadingProps(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/databases/${selected}`)
+      if (res.status === 401) {
+        setNeedsConnect(true)
+        return
+      }
+      if (!res.ok) throw new Error('속성을 불러오지 못했습니다')
+      const { properties } = (await res.json()) as { properties: NotionProperty[] }
+      const auto = autoDetectMapping(properties)
+      setStart(auto.start ?? '')
+      setEnd(NONE)
+      setDescription(NONE)
+      setLocation(NONE)
+      setProperties(properties)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoadingProps(false)
+    }
+  }
+
+  const dateProps = useMemo(
+    () => (properties ?? []).filter((p) => p.type === 'date'),
+    [properties],
+  )
+  const titleProp = useMemo(
+    () => (properties ? autoDetectMapping(properties).title : undefined),
+    [properties],
+  )
+
+  async function submit() {
+    if (!titleProp || !start) return
     setSubmitting(true)
     setError(null)
     try {
+      const mapping = {
+        title: titleProp,
+        start,
+        ...(end !== NONE ? { end } : {}),
+        ...(description !== NONE ? { description } : {}),
+        ...(location !== NONE ? { location } : {}),
+      }
       const res = await fetch('/api/calendars', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ databaseId: selected }),
+        body: JSON.stringify({ databaseId: selected, mapping }),
       })
+      if (res.status === 401) {
+        setNeedsConnect(true)
+        return
+      }
       const data = (await res.json()) as { feedUrl?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? '캘린더 생성에 실패했습니다')
       setFeedUrl(data.feedUrl ?? null)
@@ -67,6 +124,100 @@ export default function Setup() {
     )
   }
 
+  // 2단계: 필드 매핑
+  if (properties !== null) {
+    return (
+      <main style={{ padding: 32 }}>
+        <h1>필드 매핑</h1>
+        {error && <p role="alert" style={{ color: 'crimson' }}>{error}</p>}
+
+        {dateProps.length === 0 ? (
+          <p role="alert">
+            이 DB에는 날짜(date) 속성이 없어 캘린더로 만들 수 없습니다. Notion에서 날짜 속성을 추가한
+            뒤 다시 시도하세요.
+          </p>
+        ) : !titleProp ? (
+          <p role="alert">이 DB에는 제목(title) 속성이 없어 캘린더로 만들 수 없습니다.</p>
+        ) : (
+          <>
+            <p>
+              <label>
+                제목(SUMMARY): <strong>{titleProp}</strong>
+                {/* title은 DB당 1개 → 자동 감지, 변경 불가 */}
+              </label>
+            </p>
+
+            <p>
+              <label>
+                시작일(필수):{' '}
+                <select value={start} onChange={(e) => setStart(e.target.value)} disabled={dateProps.length === 1}>
+                  {dateProps.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </p>
+
+            <p>
+              <label>
+                종료일(선택, 별도 date 속성):{' '}
+                <select value={end} onChange={(e) => setEnd(e.target.value)}>
+                  <option value={NONE}>없음(-)</option>
+                  {dateProps.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </p>
+
+            <p>
+              <label>
+                설명(선택):{' '}
+                <select value={description} onChange={(e) => setDescription(e.target.value)}>
+                  <option value={NONE}>없음(-)</option>
+                  {properties.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </p>
+
+            <p>
+              <label>
+                장소(선택):{' '}
+                <select value={location} onChange={(e) => setLocation(e.target.value)}>
+                  <option value={NONE}>없음(-)</option>
+                  {properties.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </p>
+
+            <button onClick={submit} disabled={!start || submitting}>
+              {submitting ? '생성 중…' : '캘린더 만들기'}
+            </button>
+          </>
+        )}
+
+        <p>
+          <button onClick={() => setProperties(null)} disabled={submitting}>
+            뒤로
+          </button>
+        </p>
+      </main>
+    )
+  }
+
+  // 1단계: DB 선택
   return (
     <main style={{ padding: 32 }}>
       <h1>캘린더로 만들 Notion DB 선택</h1>
@@ -93,8 +244,8 @@ export default function Setup() {
               </li>
             ))}
           </ul>
-          <button onClick={submit} disabled={!selected || submitting}>
-            {submitting ? '생성 중…' : '캘린더 만들기'}
+          <button onClick={loadProperties} disabled={!selected || loadingProps}>
+            {loadingProps ? '불러오는 중…' : '다음'}
           </button>
         </>
       )}

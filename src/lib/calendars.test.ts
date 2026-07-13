@@ -19,10 +19,12 @@ beforeAll(async () => {
   db = (await import('./db')).db
 })
 
+const mapping = { title: 'Name', start: 'When', description: 'Notes' }
+
 describe('createCalendar', () => {
-  it('inserts a calendar row with mapping "{}" and a well-formed feed URL', () => {
+  it('inserts a calendar row storing the mapping JSON and a well-formed feed URL', () => {
     const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-cal' })
-    const { feedToken, feedUrl } = calendars.createCalendar({ userId, databaseId: 'db-1' })
+    const { feedToken, feedUrl } = calendars.createCalendar({ userId, databaseId: 'db-1', mapping })
 
     expect(feedUrl).toBe(`https://cal.example.com/feed/${feedToken}.ics`)
 
@@ -36,19 +38,22 @@ describe('createCalendar', () => {
     }
     expect(row.user_id).toBe(userId)
     expect(row.notion_database_id).toBe('db-1')
-    expect(row.mapping).toBe('{}')
+    // 저장된 mapping은 JSON 라운드트립으로 원본과 동일해야 한다.
+    expect(JSON.parse(row.mapping)).toEqual(mapping)
   })
 
   it('generates unguessable, unique feed tokens', () => {
     const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-cal2' })
-    const a = calendars.createCalendar({ userId, databaseId: 'db-2' })
-    const b = calendars.createCalendar({ userId, databaseId: 'db-2' })
+    const a = calendars.createCalendar({ userId, databaseId: 'db-2', mapping })
+    const b = calendars.createCalendar({ userId, databaseId: 'db-2', mapping })
 
     expect(a.feedToken).not.toBe(b.feedToken)
     expect(a.feedToken.length).toBeGreaterThanOrEqual(43) // 32 bytes base64url
   })
 
   it('rejects a calendar for a non-existent user (FK enforced)', () => {
-    expect(() => calendars.createCalendar({ userId: 'ghost', databaseId: 'db-x' })).toThrow()
+    expect(() =>
+      calendars.createCalendar({ userId: 'ghost', databaseId: 'db-x', mapping }),
+    ).toThrow()
   })
 })

@@ -53,17 +53,19 @@ export async function searchDatabases(
   return databases
 }
 
-// PLAN §5 가드: date 타입 속성이 하나도 없으면 캘린더 생성 차단용.
-export async function hasDateProperty(
+// DB retrieve로 속성 목록을 (이름, 타입) 배열로 평탄화한다. 매핑 자동감지·검증의 원본.
+// Notion `properties`는 이름을 키로 갖는 객체 → 필드 매핑 UI가 다루기 쉽게 배열로 편다.
+export async function getDatabaseProperties(
   accessToken: string,
   databaseId: string,
-): Promise<boolean> {
+): Promise<{ name: string; type: string }[]> {
   const res = await fetch(`${API}/databases/${databaseId}`, {
     headers: authHeaders(accessToken),
     signal: AbortSignal.timeout(10_000),
   })
+  // 본문에 상세/토큰 흔적이 있을 수 있어 status만 표면화.
   if (!res.ok) throw new Error(`Notion database retrieve failed: ${res.status}`)
 
   const { properties } = (await res.json()) as { properties: Record<string, { type: string }> }
-  return Object.values(properties ?? {}).some((p) => p.type === 'date')
+  return Object.entries(properties ?? {}).map(([name, { type }]) => ({ name, type }))
 }

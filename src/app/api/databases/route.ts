@@ -1,22 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { searchDatabases } from '@/lib/notion'
-import { readSession } from '@/lib/session'
-import { getDecryptedTokenByUserId } from '@/lib/users'
+import { requireToken } from '@/lib/require-token'
 
 // 매 요청 실시간 조회 — Notion이 원본, 로컬 캐시 없음 (PLAN §4).
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const userId = readSession(req)
-  if (!userId) return NextResponse.json({ error: 'Not connected' }, { status: 401 })
-
-  let accessToken: string
-  try {
-    accessToken = getDecryptedTokenByUserId(userId)
-  } catch {
-    // 세션은 있으나 user 행이 없음(삭제/위조) → 재연결 유도.
-    return NextResponse.json({ error: 'Not connected' }, { status: 401 })
-  }
+  const auth = requireToken(req)
+  if (auth instanceof NextResponse) return auth
+  const { accessToken } = auth
 
   try {
     const databases = await searchDatabases(accessToken)
