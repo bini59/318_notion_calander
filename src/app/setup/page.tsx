@@ -13,6 +13,8 @@ export default function Setup() {
   const [databases, setDatabases] = useState<Database[] | null>(null)
   const [selected, setSelected] = useState<string>('')
   const [feedUrl, setFeedUrl] = useState<string | null>(null)
+  const [calendarId, setCalendarId] = useState<string | null>(null)
+  const [rotating, setRotating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [needsConnect, setNeedsConnect] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -95,13 +97,36 @@ export default function Setup() {
         setNeedsConnect(true)
         return
       }
-      const data = (await res.json()) as { feedUrl?: string; error?: string }
+      const data = (await res.json()) as { id?: string; feedUrl?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? '캘린더 생성에 실패했습니다')
+      setCalendarId(data.id ?? null)
       setFeedUrl(data.feedUrl ?? null)
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // 재발급: 기존 URL을 즉시 무효화하므로 확인을 받는다. 성공 시 새 feedUrl로 교체.
+  async function rotate() {
+    if (!calendarId) return
+    if (!confirm('기존 URL은 즉시 무효화되고 새 URL이 발급됩니다. 계속할까요?')) return
+    setRotating(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/calendars/${calendarId}/rotate`, { method: 'POST' })
+      if (res.status === 401) {
+        setNeedsConnect(true)
+        return
+      }
+      const data = (await res.json()) as { feedUrl?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? '재발급에 실패했습니다')
+      setFeedUrl(data.feedUrl ?? null)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setRotating(false)
     }
   }
 
@@ -120,6 +145,16 @@ export default function Setup() {
         <h1>구독 URL이 생성되었습니다</h1>
         <p>캘린더 앱에 아래 URL을 구독으로 추가하세요 (구독 기능은 곧 활성화됩니다).</p>
         <input readOnly value={feedUrl} style={{ width: '100%', maxWidth: 600 }} />
+        <p role="alert" style={{ color: 'crimson' }}>
+          이 URL을 아는 사람은 인증 없이 일정 전체를 볼 수 있습니다. URL이 유출되었다면 아래에서
+          재발급하세요.
+        </p>
+        {error && <p role="alert" style={{ color: 'crimson' }}>{error}</p>}
+        {calendarId && (
+          <button onClick={rotate} disabled={rotating}>
+            {rotating ? '재발급 중…' : 'URL 재발급(기존 URL 무효화)'}
+          </button>
+        )}
       </main>
     )
   }

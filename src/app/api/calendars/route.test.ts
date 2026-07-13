@@ -94,10 +94,15 @@ describe('POST /api/calendars', () => {
     readSession.mockReturnValue('user-1')
     getDecryptedTokenByUserId.mockReturnValue('tok')
     getDatabaseProperties.mockResolvedValue(dbProps)
-    createCalendar.mockReturnValue({ feedToken: 'tok123', feedUrl: 'https://x/feed/tok123.ics' })
+    createCalendar.mockReturnValue({
+      id: 'cal-1',
+      feedToken: 'tok123',
+      feedUrl: 'https://x/feed/tok123.ics',
+    })
     const res = await POST(req({ databaseId: 'db1', mapping: validMapping }))
     expect(res.status).toBe(201)
-    expect(await res.json()).toEqual({ feedUrl: 'https://x/feed/tok123.ics' })
+    // id는 setup이 재발급에 쓴다 (#8) — 응답 shape에 포함되어야 한다.
+    expect(await res.json()).toEqual({ id: 'cal-1', feedUrl: 'https://x/feed/tok123.ics' })
     expect(createCalendar).toHaveBeenCalledWith({
       userId: 'user-1',
       databaseId: 'db1',

@@ -12,19 +12,43 @@ export function createCalendar(input: {
   userId: string
   databaseId: string
   mapping: CalendarMapping
-}): { feedToken: string; feedUrl: string } {
+}): { id: string; feedToken: string; feedUrl: string } {
+  const id = randomUUID()
   const feedToken = generateFeedToken()
 
   db.prepare(
     `INSERT INTO calendar (id, user_id, notion_database_id, feed_token, mapping)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(randomUUID(), input.userId, input.databaseId, feedToken, JSON.stringify(input.mapping))
+  ).run(id, input.userId, input.databaseId, feedToken, JSON.stringify(input.mapping))
 
   return {
+    id,
     feedToken,
-    feedUrl: `${getEnv().BASE_URL}/feed/${feedToken}.ics`,
+    feedUrl: feedUrl(feedToken),
   }
 }
+
+// 소유자가 feed_token을 재발급해 기존 URL을 즉시 무효화 (이슈 #8, PLAN §7).
+// IDOR 방어: WHERE에 user_id를 포함해 DB 레벨에서 소유권을 강제한다. 미소유/없음은
+// changes===0으로 구분 없이 undefined 반환 → 라우트가 404로 존재를 은닉(getCalendarById 불필요).
+// 즉시 무효화: getCalendarByFeedToken이 WHERE feed_token=?로 새 토큰만 찾으므로 옛 URL은 자동 404.
+export function rotateFeedToken(
+  calendarId: string,
+  userId: string,
+): { feedUrl: string } | undefined {
+  // ponytail: 256bit(randomBytes(32)) 토큰이라 UNIQUE 충돌 확률 무시 가능 — 재시도 루프 생략.
+  //           실제 충돌이 관측되면(사실상 불가) 여기에 재시도 상한을 건다.
+  const token = generateFeedToken()
+
+  const { changes } = db
+    .prepare('UPDATE calendar SET feed_token = ? WHERE id = ? AND user_id = ?')
+    .run(token, calendarId, userId)
+  if (changes === 0) return undefined
+
+  return { feedUrl: feedUrl(token) }
+}
+
+const feedUrl = (token: string) => `${getEnv().BASE_URL}/feed/${token}.ics`
 
 // feed_token으로 캘린더를 조회 (이슈 #7). 피드는 무인증 — 토큰이 곧 접근권(PLAN §7).
 // 무효/폐기 토큰은 정상 흐름이므로 throw 아닌 undefined 반환 → 라우트가 404로 변환.
