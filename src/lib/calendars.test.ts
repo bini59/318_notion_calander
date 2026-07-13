@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { getCachedFeed, setCachedFeed } from './feed-cache'
 
 let calendars: typeof import('./calendars')
 let users: typeof import('./users')
@@ -121,5 +122,21 @@ describe('rotateFeedToken (feed token re-issue, IDOR boundary)', () => {
   it('returns undefined for a non-existent calendar id', () => {
     const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-ghost-cal' })
     expect(calendars.rotateFeedToken('no-such-id', userId)).toBeUndefined()
+  })
+
+  // getCalendarByFeedToken(oldToken)===undefined는 DB만 읽어 invalidateFeed 호출과 무관하게 통과 →
+  // 캐시를 직접 심고 확인해야 line이 삭제되면 빨간불이 뜬다(#8 stale .ics 회귀 가드).
+  it('rotate invalidates the old token feed cache (#8 no stale .ics)', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rot-cache' })
+    const { id, feedToken: oldToken } = calendars.createCalendar({
+      userId,
+      databaseId: 'db-rc',
+      mapping,
+    })
+    setCachedFeed(oldToken, 'STALE-ICS')
+
+    calendars.rotateFeedToken(id, userId)
+
+    expect(getCachedFeed(oldToken)).toBeUndefined()
   })
 })
