@@ -58,6 +58,45 @@ export function rotateFeedToken(
   return { feedUrl: feedUrl(token) }
 }
 
+// 소유자의 캘린더 목록 (이슈 #12). WHERE user_id로 세션 유저 것만 — 다른 유저 노출 금지.
+// feed_token은 feedUrl로만 노출(원시 토큰을 목록에 흘리지 않는다). mapping은 저장 시 검증된 값.
+export function listCalendarsByUser(
+  userId: string,
+): { id: string; databaseId: string; feedUrl: string; mapping: CalendarMapping }[] {
+  const rows = db
+    .prepare(
+      `SELECT id, notion_database_id AS databaseId, feed_token AS feedToken, mapping
+       FROM calendar WHERE user_id = ? ORDER BY rowid`,
+    )
+    .all(userId) as { id: string; databaseId: string; feedToken: string; mapping: string }[]
+
+  return rows.map((row) => ({
+    id: row.id,
+    databaseId: row.databaseId,
+    feedUrl: feedUrl(row.feedToken),
+    mapping: JSON.parse(row.mapping) as CalendarMapping,
+  }))
+}
+
+// 소유자가 캘린더를 삭제 (이슈 #12). rotateFeedToken과 동일한 IDOR/캐시 무효화 패턴.
+// IDOR 방어: WHERE에 user_id 포함 → 미소유/없음은 changes===0으로 false, 라우트가 404로 존재 은닉.
+export function deleteCalendar(calendarId: string, userId: string): boolean {
+  // 옛 토큰을 DELETE 전에 확보 — 삭제 후엔 행이 사라져 캐시 무효화용 토큰을 못 얻는다(rotate와 동일).
+  const old = db
+    .prepare('SELECT feed_token AS feedToken FROM calendar WHERE id = ? AND user_id = ?')
+    .get(calendarId, userId) as { feedToken: string } | undefined
+
+  const { changes } = db
+    .prepare('DELETE FROM calendar WHERE id = ? AND user_id = ?')
+    .run(calendarId, userId)
+  if (changes === 0) return false
+
+  // 삭제된 토큰의 캐시를 즉시 제거 — 안 하면 삭제된 피드가 최대 5분간 stale .ics 서빙(#11 회귀).
+  if (old) invalidateFeed(old.feedToken)
+
+  return true
+}
+
 const feedUrl = (token: string) => `${getEnv().BASE_URL}/feed/${token}.ics`
 
 // feed_token으로 캘린더를 조회 (이슈 #7). 피드는 무인증 — 토큰이 곧 접근권(PLAN §7).

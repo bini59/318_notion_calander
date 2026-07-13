@@ -140,3 +140,61 @@ describe('rotateFeedToken (feed token re-issue, IDOR boundary)', () => {
     expect(getCachedFeed(oldToken)).toBeUndefined()
   })
 })
+
+describe('listCalendarsByUser (owner isolation)', () => {
+  it('returns only the session user calendars, with well-formed feed URLs and parsed mapping', () => {
+    const owner = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-list' })
+    const other = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-list-other' })
+    const a = calendars.createCalendar({ userId: owner, databaseId: 'db-a', mapping })
+    const b = calendars.createCalendar({ userId: owner, databaseId: 'db-b', mapping })
+    calendars.createCalendar({ userId: other, databaseId: 'db-c', mapping })
+
+    const list = calendars.listCalendarsByUser(owner)
+    expect(list).toEqual([
+      { id: a.id, databaseId: 'db-a', feedUrl: a.feedUrl, mapping },
+      { id: b.id, databaseId: 'db-b', feedUrl: b.feedUrl, mapping },
+    ])
+    // 다른 유저 캘린더는 노출되지 않는다.
+    expect(list.some((c) => c.databaseId === 'db-c')).toBe(false)
+  })
+
+  it('returns an empty array for a user with no calendars', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-empty' })
+    expect(calendars.listCalendarsByUser(userId)).toEqual([])
+  })
+})
+
+describe('deleteCalendar (IDOR + cache invalidation)', () => {
+  it('deletes the row and returns true for the owner', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del' })
+    const { id, feedToken } = calendars.createCalendar({ userId, databaseId: 'db-del', mapping })
+
+    expect(calendars.deleteCalendar(id, userId)).toBe(true)
+    expect(calendars.getCalendarByFeedToken(feedToken)).toBeUndefined()
+  })
+
+  it('invalidates the deleted token feed cache (#11 no stale .ics)', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-cache' })
+    const { id, feedToken } = calendars.createCalendar({ userId, databaseId: 'db-dc', mapping })
+    setCachedFeed(feedToken, 'STALE-ICS')
+
+    calendars.deleteCalendar(id, userId)
+
+    expect(getCachedFeed(feedToken)).toBeUndefined()
+  })
+
+  it('refuses to delete a calendar owned by another user (IDOR → false, row kept)', () => {
+    const owner = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-owner' })
+    const attacker = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-attacker' })
+    const { id, feedToken } = calendars.createCalendar({ userId: owner, databaseId: 'db-di', mapping })
+
+    expect(calendars.deleteCalendar(id, attacker)).toBe(false)
+    // 남의 삭제 시도는 행을 지우지 않아야 한다 — 소유자 피드는 여전히 유효.
+    expect(calendars.getCalendarByFeedToken(feedToken)).toBeDefined()
+  })
+
+  it('returns false for a non-existent calendar id', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-ghost' })
+    expect(calendars.deleteCalendar('no-such-id', userId)).toBe(false)
+  })
+})
