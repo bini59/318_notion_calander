@@ -149,6 +149,81 @@ describe('buildNotionFilter', () => {
       ],
     })
   })
+
+  it('builds relation contains/does_not_contain with the page id as value (#16)', () => {
+    expect(
+      notion.buildNotionFilter([
+        { type: 'relation', property: 'Project', condition: 'contains', value: 'page-1' },
+        { type: 'relation', property: 'Project', condition: 'does_not_contain', value: 'page-2' },
+      ]),
+    ).toEqual({
+      and: [
+        { property: 'Project', relation: { contains: 'page-1' } },
+        { property: 'Project', relation: { does_not_contain: 'page-2' } },
+      ],
+    })
+  })
+
+  it('builds relation is_empty/is_not_empty as boolean flags, ignoring value (#16)', () => {
+    expect(
+      notion.buildNotionFilter([
+        { type: 'relation', property: 'Project', condition: 'is_empty' },
+        { type: 'relation', property: 'Project', condition: 'is_not_empty' },
+      ]),
+    ).toEqual({
+      and: [
+        { property: 'Project', relation: { is_empty: true } },
+        { property: 'Project', relation: { is_not_empty: true } },
+      ],
+    })
+  })
+})
+
+describe('queryRelationPages', () => {
+  it('issues a single page_size:100 request (no pagination) and extracts page titles by title-type property', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({
+        results: [
+          { id: 'p1', properties: { Name: { type: 'title', title: [{ plain_text: 'Alpha ' }, { plain_text: 'Project' }] } } },
+          { id: 'p2', properties: { Task: { type: 'title', title: [{ plain_text: 'Beta' }] }, Extra: { type: 'rich_text' } } },
+        ],
+        has_more: true, // has_more여도 두 번째 요청을 하지 않아야 한다(상위 100개 캡).
+        next_cursor: 'cursor-2',
+      }),
+    )
+    const options = await notion.queryRelationPages('tok', 'reldb')
+    expect(options).toEqual([
+      { id: 'p1', title: 'Alpha Project' },
+      { id: 'p2', title: 'Beta' },
+    ])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.page_size).toBe(100)
+    expect(body.start_cursor).toBeUndefined()
+    expect(fetchMock.mock.calls[0][0]).toContain('/databases/reldb/query')
+  })
+
+  it('returns empty-string title for untitled / no-title-property pages', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({
+        results: [
+          { id: 'p1', properties: { Name: { type: 'title', title: [] } } },
+          { id: 'p2', properties: { Notes: { type: 'rich_text' } } },
+        ],
+        has_more: false,
+        next_cursor: null,
+      }),
+    )
+    expect(await notion.queryRelationPages('tok', 'reldb')).toEqual([
+      { id: 'p1', title: '' },
+      { id: 'p2', title: '' },
+    ])
+  })
+
+  it('throws with status only (no body leak) on non-2xx', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) })
+    await expect(notion.queryRelationPages('tok', 'reldb')).rejects.toThrow('429')
+  })
 })
 
 describe('getDatabaseProperties', () => {
@@ -190,6 +265,21 @@ describe('getDatabaseProperties', () => {
       { name: 'Place', type: 'select', options: [{ name: 'HQ' }, { name: 'Home' }] },
       { name: 'Status', type: 'status', options: [{ name: 'Todo' }, { name: 'Done' }] },
       { name: 'Tags', type: 'multi_select', options: [{ name: 'urgent' }] },
+    ])
+  })
+
+  it('exposes relation database_id as relatedDatabaseId (#16)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({
+        properties: {
+          Project: { type: 'relation', relation: { database_id: 'reldb', type: 'single_property' } },
+          When: { type: 'date' },
+        },
+      }),
+    )
+    expect(await notion.getDatabaseProperties('tok', 'db1')).toEqual([
+      { name: 'Project', type: 'relation', relatedDatabaseId: 'reldb' },
+      { name: 'When', type: 'date' },
     ])
   })
 
