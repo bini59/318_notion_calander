@@ -6,7 +6,7 @@ Notion→iCal 브릿지는 **영속 디스크가 있는 호스트**에서 `docke
 
 - Docker Engine 20.10+ 와 Docker Compose v2
 - Notion public integration (https://www.notion.so/my-integrations)
-  - **OAuth redirect URI** 를 `${BASE_URL}/api/notion/callback` 로 등록
+  - **OAuth redirect URI** 를 `${BASE_URL}/api/auth/notion/callback` 로 등록
 
 ## 2. 환경 변수
 
