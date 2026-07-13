@@ -3,5 +3,6 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { validateEnv } = await import('./lib/env')
     validateEnv()
+    await import('./lib/db') // 연결 오픈 = 스키마(DDL) 적용 — DB 경로 문제도 부팅에서 죽는다
   }
 }
