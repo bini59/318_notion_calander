@@ -1,6 +1,8 @@
 services:
   app:
+    # 셀프호스터는 `up --build`로 로컬 빌드, 서버는 `pull`로 GHCR 이미지 사용 — 둘 다 동작.
     build: .
+    image: ghcr.io/bini59/318_notion_calander:${IMAGE_TAG:-latest}
     # 컨테이너로 뜬 cloudflared가 이 이름:3000 으로 직접 붙는다 (호스트 포트 게시 불필요 —
     # 호스트 3000은 이미 다른 앱이 점유 중). 터널을 이 서비스 네트워크에 연결해서 쓴다.
     container_name: notion-ical
