@@ -45,6 +45,7 @@ export default function Setup() {
   const [submitting, setSubmitting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
+  const [calendarsLoading, setCalendarsLoading] = useState(true)
 
   // 매핑 단계 상태 — properties가 로드되면 매핑 폼으로 전환.
   const [properties, setProperties] = useState<NotionProperty[] | null>(null)
@@ -62,6 +63,7 @@ export default function Setup() {
 
   const loadDatabases = () => {
     setDatabases(null)
+    setSelected('')
     setError(null)
     fetch('/api/databases')
       .then(async (res) => {
@@ -74,6 +76,23 @@ export default function Setup() {
         setDatabases(databases)
       })
       .catch((e: Error) => setError(e.message))
+  }
+
+  const loadCalendars = () => {
+    setCalendarsLoading(true)
+    setError(null)
+    fetch('/api/calendars')
+      .then(async (res) => {
+        if (res.status === 401) {
+          setNeedsConnect(true)
+          return
+        }
+        if (!res.ok) throw new Error('캘린더 목록을 불러오지 못했습니다')
+        const { calendars } = (await res.json()) as { calendars: Calendar[] }
+        setCalendars(calendars)
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setCalendarsLoading(false))
   }
 
   useEffect(() => {
@@ -101,6 +120,7 @@ export default function Setup() {
         setCalendars(calendars)
       })
       .catch((e: Error) => setError(e.message))
+      .finally(() => setCalendarsLoading(false))
   }, [])
 
   // ponytail: N+1 회피 — properties는 사용자가 고른 DB 하나만 이 시점에 1회 조회.
@@ -260,16 +280,19 @@ export default function Setup() {
   }
 
   async function copyUrl(url: string, id = url) {
-    await navigator.clipboard.writeText(url)
-    setCopied(id)
-    window.setTimeout(() => setCopied((value) => (value === id ? null : value)), 2000)
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(id)
+      window.setTimeout(() => setCopied((value) => (value === id ? null : value)), 2000)
+    } catch {
+      setError('링크를 복사하지 못했습니다. URL을 직접 선택해 복사해 주세요.')
+    }
   }
 
   function openCreator() {
     setCreating(true)
     setFeedUrl(null)
     setProperties(null)
-    window.history.replaceState(null, '', '/setup?new=1')
   }
 
   function openDashboard() {
@@ -277,8 +300,7 @@ export default function Setup() {
     setFeedUrl(null)
     setProperties(null)
     setSelected('')
-    window.history.replaceState(null, '', '/setup')
-    fetch('/api/calendars').then((r) => r.json()).then(({ calendars }) => setCalendars(calendars)).catch(() => {})
+    loadCalendars()
   }
 
   // 재발급: 기존 URL을 즉시 무효화하므로 확인을 받는다. 성공 시 새 feedUrl로 교체.
@@ -599,7 +621,8 @@ export default function Setup() {
           <Button onClick={openCreator}>새 캘린더 만들기</Button>
         </div>
         {error && <p role="alert" className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-        {calendars === null && <div aria-label="캘린더 불러오는 중" className="space-y-3"><div className="h-44 animate-pulse rounded-xl bg-muted"/><div className="h-44 animate-pulse rounded-xl bg-muted"/></div>}
+        {calendarsLoading && <div role="status" className="space-y-3"><span className="sr-only">캘린더를 불러오는 중입니다.</span><div className="h-44 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"/><div className="h-44 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"/></div>}
+        {error && !calendarsLoading && <Button variant="outline" className="mb-4" onClick={loadCalendars}>다시 시도</Button>}
         {calendars?.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center"><CalendarDays className="mx-auto mb-3 text-muted-foreground"/><h2 className="font-medium">아직 만든 캘린더가 없어요</h2><p className="my-2 text-sm text-muted-foreground">Notion 데이터베이스를 골라 첫 캘린더를 만들어 보세요.</p><Button className="mt-3" onClick={openCreator}>새 캘린더 만들기</Button></div>}
         <ul className="space-y-4">
           {calendars?.map((cal) => {
@@ -630,7 +653,7 @@ export default function Setup() {
           {error}
         </p>
       )}
-      {databases === null && !error && <div aria-label="데이터베이스 불러오는 중" className="space-y-2"><div className="h-14 animate-pulse rounded-lg bg-muted"/><div className="h-14 animate-pulse rounded-lg bg-muted"/></div>}
+      {databases === null && !error && <div role="status" className="space-y-2"><span className="sr-only">데이터베이스를 불러오는 중입니다.</span><div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"/><div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"/></div>}
       {databases !== null && databases.length === 0 && (
         <div className="rounded-xl border border-dashed p-8 text-center"><h2 className="font-medium">아직 공유된 데이터베이스가 없어요</h2><p className="my-2 text-sm text-muted-foreground">Notion에서 이 연결에 데이터베이스를 추가하면 여기에 나타납니다.</p><details className="mx-auto my-4 max-w-md text-left text-sm"><summary className="cursor-pointer font-medium">연결 방법 보기</summary><ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground"><li>Notion에서 데이터베이스를 엽니다.</li><li>오른쪽 위 ··· 메뉴에서 연결을 선택합니다.</li><li>이 통합을 찾아 추가한 뒤 여기서 다시 확인합니다.</li></ol></details><Button onClick={loadDatabases}><RefreshCw/>다시 확인</Button></div>
       )}
