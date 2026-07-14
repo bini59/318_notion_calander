@@ -1,5 +1,6 @@
 # claude/agent tooling (local)
 .claude/
+.agents/
 CLAUDE.md
 CONTEXT.md
 graphify-out/
