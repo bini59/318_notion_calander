@@ -61,7 +61,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
         }
       }
     }
-    const ics = eventsToIcs(pagesToEvents(pages, calendar.mapping, bodyTextByPage))
+    const ics = eventsToIcs(pagesToEvents(pages, calendar.mapping, bodyTextByPage), calendar.name)
 
     setCachedFeed(token, ics) // 성공 .ics만 캐시 — 아래 catch(404/502)는 저장 안 함.
     return icsResponse(ics, token)

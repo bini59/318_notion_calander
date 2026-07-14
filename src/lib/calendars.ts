@@ -13,20 +13,49 @@ export function createCalendar(input: {
   userId: string
   databaseId: string
   mapping: CalendarMapping
-}): { id: string; feedToken: string; feedUrl: string } {
+  name?: string
+}): { id: string; feedToken: string; feedUrl: string; name: string } {
   const id = randomUUID()
   const feedToken = generateFeedToken()
+  // ponytail: 클라 pre-fill로 DB 제목 폴백 — 서버 retrieve-database 왕복 회피. 빈 값만 하드 폴백.
+  //           서버가 제목을 알아야 하면 여기에 notion 조회 추가.
+  const name = input.name?.trim() || 'Notion Calendar'
 
   db.prepare(
-    `INSERT INTO calendar (id, user_id, notion_database_id, feed_token, mapping)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, input.userId, input.databaseId, feedToken, JSON.stringify(input.mapping))
+    `INSERT INTO calendar (id, user_id, notion_database_id, feed_token, name, mapping)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(id, input.userId, input.databaseId, feedToken, name, JSON.stringify(input.mapping))
 
   return {
     id,
     feedToken,
     feedUrl: feedUrl(feedToken),
+    name,
   }
+}
+
+// 소유자가 캘린더 이름을 변경. X-WR-CALNAME이 캐시된 .ics 본문에 들어가므로 rename 후 캐시 무효화 필수
+// (누락 시 최대 5분 옛 이름 서빙, #8/#11 회귀). 토큰은 안 바뀌므로 현재 feed_token만 invalidate.
+// IDOR: WHERE id=? AND user_id=? → 미소유/없음은 changes===0 → undefined, 라우트가 404로 존재 은닉.
+export function renameCalendar(
+  calendarId: string,
+  userId: string,
+  name: string,
+): { name: string } | undefined {
+  const trimmed = name.trim() || 'Notion Calendar'
+  // 캐시 무효화용 feed_token을 UPDATE 전에 확보 (rotate/delete와 동일 패턴).
+  const old = db
+    .prepare('SELECT feed_token AS feedToken FROM calendar WHERE id = ? AND user_id = ?')
+    .get(calendarId, userId) as { feedToken: string } | undefined
+
+  const { changes } = db
+    .prepare('UPDATE calendar SET name = ? WHERE id = ? AND user_id = ?')
+    .run(trimmed, calendarId, userId)
+  if (changes === 0) return undefined
+
+  if (old) invalidateFeed(old.feedToken)
+
+  return { name: trimmed }
 }
 
 // 소유자가 feed_token을 재발급해 기존 URL을 즉시 무효화 (이슈 #8, PLAN §7).
@@ -62,16 +91,23 @@ export function rotateFeedToken(
 // feed_token은 feedUrl로만 노출(원시 토큰을 목록에 흘리지 않는다). mapping은 저장 시 검증된 값.
 export function listCalendarsByUser(
   userId: string,
-): { id: string; databaseId: string; feedUrl: string; mapping: CalendarMapping }[] {
+): { id: string; name: string; databaseId: string; feedUrl: string; mapping: CalendarMapping }[] {
   const rows = db
     .prepare(
-      `SELECT id, notion_database_id AS databaseId, feed_token AS feedToken, mapping
+      `SELECT id, name, notion_database_id AS databaseId, feed_token AS feedToken, mapping
        FROM calendar WHERE user_id = ? ORDER BY rowid`,
     )
-    .all(userId) as { id: string; databaseId: string; feedToken: string; mapping: string }[]
+    .all(userId) as {
+    id: string
+    name: string
+    databaseId: string
+    feedToken: string
+    mapping: string
+  }[]
 
   return rows.map((row) => ({
     id: row.id,
+    name: row.name,
     databaseId: row.databaseId,
     feedUrl: feedUrl(row.feedToken),
     mapping: JSON.parse(row.mapping) as CalendarMapping,
@@ -103,18 +139,21 @@ const feedUrl = (token: string) => `${getEnv().BASE_URL}/feed/${token}.ics`
 // 무효/폐기 토큰은 정상 흐름이므로 throw 아닌 undefined 반환 → 라우트가 404로 변환.
 export function getCalendarByFeedToken(
   token: string,
-): { userId: string; databaseId: string; mapping: CalendarMapping } | undefined {
+): { userId: string; name: string; databaseId: string; mapping: CalendarMapping } | undefined {
   const row = db
     .prepare(
-      'SELECT user_id AS userId, notion_database_id AS databaseId, mapping FROM calendar WHERE feed_token = ?',
+      'SELECT user_id AS userId, name, notion_database_id AS databaseId, mapping FROM calendar WHERE feed_token = ?',
     )
-    .get(token) as { userId: string; databaseId: string; mapping: string } | undefined
+    .get(token) as
+    | { userId: string; name: string; databaseId: string; mapping: string }
+    | undefined
   if (!row) return undefined
 
   // ponytail: mapping은 쓰기 시 validateMappingAgainstProperties로 검증된 자체 데이터 — 재검증 생략.
   // JSON.parse 실패(수기 DB 변조)는 throw → 라우트가 502로 흡수.
   return {
     userId: row.userId,
+    name: row.name,
     databaseId: row.databaseId,
     mapping: JSON.parse(row.mapping) as CalendarMapping,
   }
