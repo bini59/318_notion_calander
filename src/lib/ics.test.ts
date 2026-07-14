@@ -71,4 +71,11 @@ describe('eventsToIcs — RFC 5545 도메인 함정', () => {
     expect(ics).toContain('PRODID')
     expect(ics).toContain('BEGIN:VEVENT')
   })
+
+  it('calName → X-WR-CALNAME 출력 (캘린더 앱 표시 이름, #18)', () => {
+    const events: CalendarEvent[] = [{ uid: 'p', title: 'x', start: '2026-07-13', allDay: true }]
+    expect(eventsToIcs(events, '내 일정')).toContain('X-WR-CALNAME:내 일정')
+    // calName 미지정 시 헤더 없음.
+    expect(eventsToIcs(events)).not.toContain('X-WR-CALNAME')
+  })
 })

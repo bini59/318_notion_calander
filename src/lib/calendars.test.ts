@@ -66,6 +66,7 @@ describe('getCalendarByFeedToken (feed auth boundary)', () => {
 
     expect(calendars.getCalendarByFeedToken(feedToken)).toEqual({
       userId,
+      name: 'Notion Calendar',
       databaseId: 'db-feed',
       mapping,
     })
@@ -104,6 +105,7 @@ describe('rotateFeedToken (feed token re-issue, IDOR boundary)', () => {
     const newToken = result!.feedUrl.match(/\/feed\/(.+)\.ics$/)![1]
     expect(calendars.getCalendarByFeedToken(newToken)).toEqual({
       userId,
+      name: 'Notion Calendar',
       databaseId: 'db-rot',
       mapping,
     })
@@ -151,8 +153,8 @@ describe('listCalendarsByUser (owner isolation)', () => {
 
     const list = calendars.listCalendarsByUser(owner)
     expect(list).toEqual([
-      { id: a.id, databaseId: 'db-a', feedUrl: a.feedUrl, mapping },
-      { id: b.id, databaseId: 'db-b', feedUrl: b.feedUrl, mapping },
+      { id: a.id, name: 'Notion Calendar', databaseId: 'db-a', feedUrl: a.feedUrl, mapping },
+      { id: b.id, name: 'Notion Calendar', databaseId: 'db-b', feedUrl: b.feedUrl, mapping },
     ])
     // 다른 유저 캘린더는 노출되지 않는다.
     expect(list.some((c) => c.databaseId === 'db-c')).toBe(false)
@@ -196,5 +198,62 @@ describe('deleteCalendar (IDOR + cache invalidation)', () => {
   it('returns false for a non-existent calendar id', () => {
     const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-ghost' })
     expect(calendars.deleteCalendar('no-such-id', userId)).toBe(false)
+  })
+})
+
+describe('calendar name (#18)', () => {
+  it('stores a provided name, trimming whitespace', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-name' })
+    const { feedToken } = calendars.createCalendar({
+      userId,
+      databaseId: 'db-n',
+      mapping,
+      name: '  내 일정  ',
+    })
+    expect(calendars.getCalendarByFeedToken(feedToken)!.name).toBe('내 일정')
+  })
+
+  it('falls back to "Notion Calendar" for empty/blank name', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-name-blank' })
+    const { feedToken } = calendars.createCalendar({
+      userId,
+      databaseId: 'db-nb',
+      mapping,
+      name: '   ',
+    })
+    expect(calendars.getCalendarByFeedToken(feedToken)!.name).toBe('Notion Calendar')
+  })
+
+  it('renames a calendar for the owner', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rename' })
+    const { id, feedToken } = calendars.createCalendar({ userId, databaseId: 'db-rn', mapping })
+
+    expect(calendars.renameCalendar(id, userId, ' 회의 ')).toEqual({ name: '회의' })
+    expect(calendars.getCalendarByFeedToken(feedToken)!.name).toBe('회의')
+  })
+
+  it('refuses to rename a calendar owned by another user (IDOR → undefined, no change)', () => {
+    const owner = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rn-owner' })
+    const attacker = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rn-atk' })
+    const { id, feedToken } = calendars.createCalendar({ userId: owner, databaseId: 'db-rni', mapping })
+
+    expect(calendars.renameCalendar(id, attacker, 'hijack')).toBeUndefined()
+    expect(calendars.getCalendarByFeedToken(feedToken)!.name).toBe('Notion Calendar')
+  })
+
+  // rename은 X-WR-CALNAME이 캐시된 .ics 본문에 있으므로 현재 토큰 캐시를 무효화해야 한다(#8/#11 회귀 가드).
+  it('invalidates the feed cache on rename (no stale .ics)', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rn-cache' })
+    const { id, feedToken } = calendars.createCalendar({ userId, databaseId: 'db-rnc', mapping })
+    setCachedFeed(feedToken, 'STALE-ICS')
+
+    calendars.renameCalendar(id, userId, 'new')
+
+    expect(getCachedFeed(feedToken)).toBeUndefined()
+  })
+
+  it('returns undefined for a non-existent calendar id', () => {
+    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rn-ghost' })
+    expect(calendars.renameCalendar('no-such-id', userId, 'x')).toBeUndefined()
   })
 })

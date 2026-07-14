@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select'
 
 type Database = { id: string; title: string }
-type Calendar = { id: string; feedUrl: string }
+type Calendar = { id: string; name: string; feedUrl: string }
 // relation(#16) 값 드롭다운 원본: 관련 DB 페이지 목록의 로딩/에러/결과를 property 이름별로 캐시.
 type RelationState = { loading?: boolean; error?: string; options?: { id: string; title: string }[] }
 
@@ -46,6 +46,7 @@ export default function Setup() {
   // 매핑 단계 상태 — properties가 로드되면 매핑 폼으로 전환.
   const [properties, setProperties] = useState<NotionProperty[] | null>(null)
   const [loadingProps, setLoadingProps] = useState(false)
+  const [name, setName] = useState('') // 캘린더 이름(#18) — DB 제목으로 pre-fill, 빈 값은 서버 폴백
   const [start, setStart] = useState('')
   const [end, setEnd] = useState(NONE)
   const [description, setDescription] = useState(NONE)
@@ -99,6 +100,8 @@ export default function Setup() {
       if (!res.ok) throw new Error('속성을 불러오지 못했습니다')
       const { properties } = (await res.json()) as { properties: NotionProperty[] }
       const auto = autoDetectMapping(properties)
+      // #18: 이름을 선택 DB 제목으로 pre-fill (서버 retrieve-database 왕복 회피, ponytail).
+      setName(databases?.find((d) => d.id === selected)?.title ?? '')
       setStart(auto.start ?? '')
       setEnd(NONE)
       setDescription(NONE)
@@ -223,7 +226,7 @@ export default function Setup() {
       const res = await fetch('/api/calendars', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ databaseId: selected, mapping }),
+        body: JSON.stringify({ databaseId: selected, mapping, name }),
       })
       if (res.status === 401) {
         setNeedsConnect(true)
@@ -280,6 +283,34 @@ export default function Setup() {
       }
       if (!res.ok) throw new Error('삭제에 실패했습니다')
       setCalendars((prev) => (prev ? prev.filter((c) => c.id !== id) : prev))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  // 이름 변경(#18). 목록 Input을 그대로 controlled로 쓰므로 값은 이미 calendars state에 있음 — id만 받아 PATCH.
+  // ponytail: 실패 시 옛 이름으로 revert 안 함(원본 미보관) — 표시 라벨이라 무해, 새로고침이 서버값으로 정정.
+  async function rename(id: string, value: string) {
+    setBusyId(id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/calendars/${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: value }),
+      })
+      if (res.status === 401) {
+        setNeedsConnect(true)
+        return
+      }
+      const data = (await res.json()) as { name?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? '이름 변경에 실패했습니다')
+      // 서버가 trim/폴백한 최종 이름으로 교체(불변).
+      setCalendars((prev) =>
+        prev ? prev.map((c) => (c.id === id && data.name ? { ...c, name: data.name } : c)) : prev,
+      )
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -361,6 +392,21 @@ export default function Setup() {
           </p>
         ) : (
           <>
+            {/* 캘린더 이름(#18) — 캘린더 앱에 표시될 이름(X-WR-CALNAME). DB 제목으로 pre-fill. */}
+            <div className="mb-6 space-y-2">
+              <Label htmlFor="cal-name" className="text-sm font-medium">
+                캘린더 이름
+              </Label>
+              <Input
+                id="cal-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Notion Calendar"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground">캘린더 앱에 표시될 이름입니다.</p>
+            </div>
+
             {/* 필수 그룹 */}
             <fieldset className="space-y-4">
               <legend className="mb-3 flex items-center gap-2 text-sm font-medium">
@@ -532,6 +578,28 @@ export default function Setup() {
           <ul className="space-y-4">
             {calendars.map((cal) => (
               <li key={cal.id} className="rounded-lg border border-border bg-card p-4">
+                <div className="mb-3 flex gap-2">
+                  <Input
+                    aria-label="캘린더 이름"
+                    value={cal.name}
+                    maxLength={200}
+                    onChange={(e) =>
+                      setCalendars((prev) =>
+                        prev
+                          ? prev.map((c) => (c.id === cal.id ? { ...c, name: e.target.value } : c))
+                          : prev,
+                      )
+                    }
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => rename(cal.id, cal.name)}
+                    disabled={busyId === cal.id || !cal.name.trim()}
+                  >
+                    이름 저장
+                  </Button>
+                </div>
                 <Input
                   aria-label="구독 URL"
                   readOnly

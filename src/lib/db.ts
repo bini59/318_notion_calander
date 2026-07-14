@@ -11,7 +11,17 @@ function open() {
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON') // 연결 단위 pragma — 매 open마다 필요
   db.exec(schema)
+  migrate(db)
   return db
+}
+
+// ponytail: 첫 스키마 변경 — guarded ALTER 1개로 충분. 두 번째가 생기면 번호달린 마이그레이션 러너로 승격.
+// 기존 배포 DB(name 컬럼 없음)에 name을 채운다. CREATE 스키마엔 이미 name이 있으므로 신규 DB는 no-op.
+function migrate(db: Database.Database) {
+  const cols = db.pragma('table_info(calendar)') as { name: string }[]
+  if (!cols.some((c) => c.name === 'name')) {
+    db.exec(`ALTER TABLE calendar ADD COLUMN name TEXT NOT NULL DEFAULT 'Notion Calendar'`)
+  }
 }
 
 // PLAN §4 — 이벤트 테이블 없음, Notion이 원본. 멱등 DDL이라 부팅마다 실행해도 안전.
@@ -28,6 +38,7 @@ const schema = `
     user_id TEXT NOT NULL REFERENCES user(id),
     notion_database_id TEXT NOT NULL,
     feed_token TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL DEFAULT 'Notion Calendar',
     mapping TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );

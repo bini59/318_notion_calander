@@ -68,8 +68,12 @@ function toAttributes(event: CalendarEvent): EventAttributes {
   } as EventAttributes
 }
 
-export function eventsToIcs(events: CalendarEvent[]): string {
-  const { error, value } = createEvents(events.map(toAttributes))
+export function eventsToIcs(events: CalendarEvent[], calName?: string): string {
+  // calName → X-WR-CALNAME (캘린더 앱 표시 이름). ics가 헤더 폴딩/이스케이프 처리.
+  const { error, value } = createEvents(
+    events.map(toAttributes),
+    calName ? { calName } : undefined,
+  )
   // 라이브러리 검증 실패는 삼키지 않는다 — 라우트가 502로 흡수.
   if (error) throw error
   return value ?? ''

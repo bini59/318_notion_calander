@@ -31,7 +31,7 @@ beforeEach(() => {
 })
 
 const params = (token: string) => ({ params: Promise.resolve({ token }) })
-const calendar = { userId: 'u1', databaseId: 'db1', mapping: { title: 'Name', start: 'When' } }
+const calendar = { userId: 'u1', name: '내 일정', databaseId: 'db1', mapping: { title: 'Name', start: 'When' } }
 const page = {
   id: 'pg1',
   url: 'https://notion.so/pg1',
@@ -71,6 +71,8 @@ describe('GET /feed/[token].ics', () => {
     const body = await res.text()
     expect(body).toContain('BEGIN:VCALENDAR')
     expect(body).toContain('UID:pg1')
+    // 캘린더 이름이 X-WR-CALNAME으로 흘러야 한다 (#18).
+    expect(body).toContain('X-WR-CALNAME:내 일정')
   })
 })
 

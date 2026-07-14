@@ -93,7 +93,7 @@ describe('POST /api/calendars', () => {
     expect(createCalendar).not.toHaveBeenCalled()
   })
 
-  it('creates a calendar and returns the feed URL for a valid mapping', async () => {
+  it('creates a calendar and returns the feed URL + name for a valid mapping', async () => {
     readSession.mockReturnValue('user-1')
     getDecryptedTokenByUserId.mockReturnValue('tok')
     getDatabaseProperties.mockResolvedValue(dbProps)
@@ -101,15 +101,38 @@ describe('POST /api/calendars', () => {
       id: 'cal-1',
       feedToken: 'tok123',
       feedUrl: 'https://x/feed/tok123.ics',
+      name: '내 일정',
     })
-    const res = await POST(req({ databaseId: 'db1', mapping: validMapping }))
+    const res = await POST(req({ databaseId: 'db1', mapping: validMapping, name: '내 일정' }))
     expect(res.status).toBe(201)
-    // id는 setup이 재발급에 쓴다 (#8) — 응답 shape에 포함되어야 한다.
-    expect(await res.json()).toEqual({ id: 'cal-1', feedUrl: 'https://x/feed/tok123.ics' })
+    // id는 setup이 재발급에 쓴다 (#8) — 응답 shape에 포함되어야 한다. name(#18)도 반환.
+    expect(await res.json()).toEqual({ id: 'cal-1', feedUrl: 'https://x/feed/tok123.ics', name: '내 일정' })
     expect(createCalendar).toHaveBeenCalledWith({
       userId: 'user-1',
       databaseId: 'db1',
       mapping: validMapping,
+      name: '내 일정',
+    })
+  })
+
+  it('creates a calendar without a name (server falls back — #18)', async () => {
+    readSession.mockReturnValue('user-1')
+    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getDatabaseProperties.mockResolvedValue(dbProps)
+    createCalendar.mockReturnValue({
+      id: 'cal-2',
+      feedToken: 't2',
+      feedUrl: 'https://x/feed/t2.ics',
+      name: 'Notion Calendar',
+    })
+    const res = await POST(req({ databaseId: 'db1', mapping: validMapping }))
+    expect(res.status).toBe(201)
+    // name 미지정 → createCalendar에 name:undefined로 위임, lib가 폴백.
+    expect(createCalendar).toHaveBeenCalledWith({
+      userId: 'user-1',
+      databaseId: 'db1',
+      mapping: validMapping,
+      name: undefined,
     })
   })
 

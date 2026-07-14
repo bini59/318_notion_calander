@@ -7,7 +7,12 @@ import { requireToken } from '@/lib/require-token'
 
 export const dynamic = 'force-dynamic'
 
-const bodySchema = z.object({ databaseId: z.string().min(1), mapping: mappingSchema })
+const bodySchema = z.object({
+  databaseId: z.string().min(1),
+  mapping: mappingSchema,
+  // 표시 라벨(X-WR-CALNAME)일 뿐 신뢰경계 아님 — trim/max만. 빈 값은 lib가 폴백.
+  name: z.string().trim().max(200).optional(),
+})
 
 // 소유자의 캘린더 목록 (이슈 #12). listCalendarsByUser가 WHERE user_id로 세션 유저 것만 반환.
 export function GET(req: NextRequest) {
@@ -25,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'databaseId와 유효한 mapping이 필요합니다' }, { status: 400 })
   }
-  const { databaseId, mapping } = parsed.data
+  const { databaseId, mapping, name } = parsed.data
 
   try {
     // 신뢰경계: 클라이언트 mapping을 그대로 믿지 않는다. Notion 속성을 서버에서 재조회해
@@ -40,9 +45,9 @@ export async function POST(req: NextRequest) {
     const reason = validateMappingAgainstProperties(mapping, properties)
     if (reason) return NextResponse.json({ error: reason }, { status: 400 })
 
-    const { id, feedUrl } = createCalendar({ userId, databaseId, mapping })
+    const { id, feedUrl, name: savedName } = createCalendar({ userId, databaseId, mapping, name })
     // id는 setup이 재발급(POST /api/calendars/[id]/rotate)에 쓴다 (이슈 #8).
-    return NextResponse.json({ id, feedUrl }, { status: 201 })
+    return NextResponse.json({ id, feedUrl, name: savedName }, { status: 201 })
   } catch (error) {
     console.error('Calendar creation failed:', error)
     return NextResponse.json({ error: 'Failed to create calendar' }, { status: 502 })
