@@ -22,7 +22,7 @@ cp .env.example .env
 | `NOTION_CLIENT_SECRET` | Notion integration의 OAuth client secret |
 | `TOKEN_ENC_KEY` | 저장 토큰 암호화 키. **hex 64자** — `openssl rand -hex 32` 로 생성 |
 | `BASE_URL` | 공개 접속 주소 (피드 URL·OAuth redirect 구성용). 예: `https://cal.example.com` |
-| `DATABASE_URL` | SQLite 파일 경로. **compose가 `/app/data/app.db` 로 덮어씀** — `.env` 값은 무시된다(로컬 `npm run dev` 시에만 사용) |
+| `DATABASE_URL` | SQLite 파일 경로. **compose가 `/app/data/app.db` 로 덮어씀** — `.env` 값은 무시된다(로컬 `pnpm dev` 시에만 사용) |
 
 ```bash
 # TOKEN_ENC_KEY 생성 예시

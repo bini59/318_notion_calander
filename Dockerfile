@@ -5,9 +5,9 @@ FROM node:22-alpine AS base
 FROM base AS deps
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
-# .npmrc 포함 — legacy-peer-deps=true (React 19 + radix/lucide peer 충돌 회피). 없으면 npm ci가 ERESOLVE로 실패.
-COPY package.json package-lock.json .npmrc ./
-RUN npm ci
+# pnpm 설정과 lockfile을 함께 복사해 재현 가능한 설치를 유지한다.
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN corepack enable && corepack prepare pnpm@10.10.0 --activate && pnpm install --frozen-lockfile
 
 # build: standalone 출력 생성
 FROM base AS build
@@ -21,7 +21,7 @@ RUN NOTION_CLIENT_ID=build \
     TOKEN_ENC_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
     BASE_URL=http://localhost:3000 \
     DATABASE_URL=/tmp/build.db \
-    npm run build
+    pnpm build
 
 # runner: 툴체인 미포함 경량 이미지
 FROM base AS runner
