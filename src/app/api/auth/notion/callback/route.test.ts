@@ -3,21 +3,23 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // 라우트가 붙는 실제 계약만 mock — STATE_COOKIE 등 상수는 원본 유지.
 const exchangeCodeForToken = vi.fn()
-const upsertUserByWorkspace = vi.fn()
+const upsertUser = vi.fn()
 
 vi.mock('@/lib/notion-oauth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/notion-oauth')>()),
   exchangeCodeForToken,
 }))
-vi.mock('@/lib/users', () => ({ upsertUserByWorkspace }))
+vi.mock('@/lib/users', () => ({ upsertUser }))
 
 let GET: typeof import('./route').GET
 let STATE_COOKIE: string
 
 const CALLBACK = 'http://localhost:3000/api/auth/notion/callback'
 
-function req(query: string, cookieState?: string): NextRequest {
+// x-user-id는 proxy.ts가 sid 검증 후 주입하는 auth userId.
+function req(query: string, cookieState?: string, authUserId: string | null = 'auth-1'): NextRequest {
   const headers: Record<string, string> = {}
+  if (authUserId) headers['x-user-id'] = authUserId
   if (cookieState !== undefined) headers.cookie = `${STATE_COOKIE}=${cookieState}`
   return new NextRequest(`${CALLBACK}${query}`, { headers })
 }
@@ -34,7 +36,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   exchangeCodeForToken.mockReset()
-  upsertUserByWorkspace.mockReset()
+  upsertUser.mockReset()
 })
 
 describe('GET /api/auth/notion/callback', () => {
@@ -64,23 +66,27 @@ describe('GET /api/auth/notion/callback', () => {
     expect(body).not.toMatch(/secret_ntn_leak|401|boom/)
   })
 
-  it('redirects to /setup, clears state, and sets a session cookie on success', async () => {
+  it('returns 401 without exchanging the code when there is no logged-in user', async () => {
+    const res = await GET(req('?code=c&state=s', 's', null))
+    expect(res.status).toBe(401)
+    expect(exchangeCodeForToken).not.toHaveBeenCalled()
+  })
+
+  it('links the Notion token to the auth user, redirects to /setup and clears state', async () => {
     exchangeCodeForToken.mockResolvedValue({ accessToken: 'tok', workspaceId: 'ws' })
-    upsertUserByWorkspace.mockReturnValue('user-1')
+    upsertUser.mockReturnValue('user-1')
     const res = await GET(req('?code=the-code&state=s', 's'))
 
     expect(res.headers.get('location')).toBe('http://localhost:3000/setup')
     expect(exchangeCodeForToken).toHaveBeenCalledWith('the-code')
-    expect(upsertUserByWorkspace).toHaveBeenCalledWith({ accessToken: 'tok', workspaceId: 'ws' })
+    expect(upsertUser).toHaveBeenCalledWith({ authUserId: 'auth-1', accessToken: 'tok', workspaceId: 'ws' })
 
     const setCookie = res.headers.get('set-cookie') ?? ''
     // state 삭제 = 빈 값 + 과거 만료(Next.js는 Expires=1970 또는 Max-Age=0로 지운다)
     expect(setCookie).toMatch(
       new RegExp(`${STATE_COOKIE}=;.*(Max-Age=0|Expires=Thu, 01 Jan 1970)`, 'i'),
     )
-    // 세션 쿠키는 봉인된(평문 user id 아닌) 값 + httpOnly
-    expect(setCookie).toMatch(/session=/)
-    expect(setCookie).not.toMatch(/session=user-1[;,]/)
-    expect(setCookie).toMatch(/HttpOnly/i)
+    // 로그인은 auth의 sid 쿠키 몫 — 이 앱은 더 이상 자체 세션 쿠키를 발급하지 않는다.
+    expect(setCookie).not.toMatch(/session=/)
   })
 })

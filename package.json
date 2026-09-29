@@ -12,6 +12,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@bini59/design": "github:bini59/324_bini59_design#v0.3.0",
     "@next/third-parties": "^16.2.10",
     "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",

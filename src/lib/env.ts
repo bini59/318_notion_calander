@@ -14,6 +14,10 @@ const schema = z.object({
     .regex(/^[0-9a-f]{64}$/i, '32바이트 hex여야 함 — 생성: openssl rand -hex 32'),
   BASE_URL: z.url(),
   DATABASE_URL: z.string().min(1),
+  // 321_auth(SSO) 연동 — auth.bini59.dev에 등록한 서비스 ID / secret.
+  AUTH_ORIGIN: z.url().default('https://auth.bini59.dev'),
+  CLIENT_ID: z.string().min(1),
+  APP_SECRET: z.string().min(1),
 })
 
 export type Env = z.infer<typeof schema>

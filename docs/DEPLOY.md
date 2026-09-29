@@ -7,10 +7,14 @@ Notion→iCal 브릿지는 **영속 디스크가 있는 호스트**에서 `docke
 - Docker Engine 20.10+ 와 Docker Compose v2
 - Notion public integration (https://www.notion.so/my-integrations)
   - **OAuth redirect URI** 를 `${BASE_URL}/api/auth/notion/callback` 로 등록
+- 321_auth(SSO) 서비스 등록 (auth.bini59.dev 어드민 > 서비스)
+  - 서비스 ID(`CLIENT_ID`), **허용 origin = `BASE_URL`의 origin**(예: `https://n2c.bini59.dev`), 기본 반환 주소 `${BASE_URL}/setup`
+  - 등록 시 나오는 secret이 `APP_SECRET` (재발급하면 기존 값은 즉시 무효)
+  - 앱은 `*.bini59.dev` 하위에서 서비스돼야 공유 `sid` 쿠키가 실린다. 랜딩(`/`)과 캘린더 피드(`/feed/*`)만 공개, 나머지는 로그인 필요
 
 ## 2. 환경 변수
 
-`.env.example` 를 복사해 `.env` 를 만들고 값을 채운다. 5개 모두 필수 — 누락 시 부팅이 즉시 실패한다(zod 검증).
+`.env.example` 를 복사해 `.env` 를 만들고 값을 채운다. `AUTH_ORIGIN` 외 7개 모두 필수 — 누락 시 부팅이 즉시 실패한다(zod 검증).
 
 ```bash
 cp .env.example .env
@@ -23,6 +27,9 @@ cp .env.example .env
 | `TOKEN_ENC_KEY` | 저장 토큰 암호화 키. **hex 64자** — `openssl rand -hex 32` 로 생성 |
 | `BASE_URL` | 공개 접속 주소 (피드 URL·OAuth redirect 구성용). 예: `https://cal.example.com` |
 | `DATABASE_URL` | SQLite 파일 경로. **compose가 `/app/data/app.db` 로 덮어씀** — `.env` 값은 무시된다(로컬 `pnpm dev` 시에만 사용) |
+| `AUTH_ORIGIN` | 321_auth 주소. 기본 `https://auth.bini59.dev` |
+| `CLIENT_ID` | auth에 등록한 서비스 ID (`n2c`) |
+| `APP_SECRET` | 그 서비스의 secret — `/verify` 호출에 사용 |
 
 ```bash
 # TOKEN_ENC_KEY 생성 예시
@@ -51,7 +58,7 @@ docker compose down
 
 ## 4. 첫 연결 (OAuth → 피드)
 
-1. `BASE_URL` 접속 → Notion 연결(OAuth) 진행
+1. `BASE_URL` 접속 → auth.bini59.dev 로그인(이미 로그인돼 있으면 화면 없이 통과) → Notion 연결(OAuth) 진행. Notion 연결은 계정당 처음 한 번뿐이고, 이후엔 어느 기기에서든 로그인만 하면 된다.
 2. 공유된 Notion DB 선택 → 캘린더 생성 → 필드 매핑
 3. 발급된 `.ics` 피드 URL(`${BASE_URL}/feed/<token>.ics`)을 캘린더 앱에서 구독
 

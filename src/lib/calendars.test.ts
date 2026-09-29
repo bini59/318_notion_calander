@@ -24,7 +24,7 @@ const mapping = { title: 'Name', start: 'When', description: 'Notes' }
 
 describe('createCalendar', () => {
   it('inserts a calendar row storing the mapping JSON and a well-formed feed URL', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-cal' })
+    const userId = users.upsertUser({ authUserId: 'ws-cal', accessToken: 'tok', workspaceId: 'ws-cal' })
     const { feedToken, feedUrl } = calendars.createCalendar({ userId, databaseId: 'db-1', mapping })
 
     expect(feedUrl).toBe(`https://cal.example.com/feed/${feedToken}.ics`)
@@ -44,7 +44,7 @@ describe('createCalendar', () => {
   })
 
   it('generates unguessable, unique feed tokens', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-cal2' })
+    const userId = users.upsertUser({ authUserId: 'ws-cal2', accessToken: 'tok', workspaceId: 'ws-cal2' })
     const a = calendars.createCalendar({ userId, databaseId: 'db-2', mapping })
     const b = calendars.createCalendar({ userId, databaseId: 'db-2', mapping })
 
@@ -61,7 +61,7 @@ describe('createCalendar', () => {
 
 describe('getCalendarByFeedToken (feed auth boundary)', () => {
   it('round-trips a valid token → {userId, databaseId, mapping}', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-feed' })
+    const userId = users.upsertUser({ authUserId: 'ws-feed', accessToken: 'tok', workspaceId: 'ws-feed' })
     const { feedToken } = calendars.createCalendar({ userId, databaseId: 'db-feed', mapping })
 
     expect(calendars.getCalendarByFeedToken(feedToken)).toEqual({
@@ -77,7 +77,7 @@ describe('getCalendarByFeedToken (feed auth boundary)', () => {
   })
 
   it('throws on corrupted mapping JSON (502 contract — DB tampering)', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-bad' })
+    const userId = users.upsertUser({ authUserId: 'ws-bad', accessToken: 'tok', workspaceId: 'ws-bad' })
     db.prepare(
       `INSERT INTO calendar (id, user_id, notion_database_id, feed_token, mapping)
        VALUES (?, ?, ?, ?, ?)`,
@@ -89,7 +89,7 @@ describe('getCalendarByFeedToken (feed auth boundary)', () => {
 
 describe('rotateFeedToken (feed token re-issue, IDOR boundary)', () => {
   it('invalidates the old token and activates a new one (완료조건)', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rot' })
+    const userId = users.upsertUser({ authUserId: 'ws-rot', accessToken: 'tok', workspaceId: 'ws-rot' })
     const { id, feedToken: oldToken, feedUrl: oldUrl } = calendars.createCalendar({
       userId,
       databaseId: 'db-rot',
@@ -112,8 +112,8 @@ describe('rotateFeedToken (feed token re-issue, IDOR boundary)', () => {
   })
 
   it('refuses to rotate a calendar owned by another user (IDOR → undefined, no change)', () => {
-    const owner = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-owner' })
-    const attacker = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-attacker' })
+    const owner = users.upsertUser({ authUserId: 'ws-owner', accessToken: 'tok', workspaceId: 'ws-owner' })
+    const attacker = users.upsertUser({ authUserId: 'ws-attacker', accessToken: 'tok', workspaceId: 'ws-attacker' })
     const { id, feedToken } = calendars.createCalendar({ userId: owner, databaseId: 'db-idor', mapping })
 
     expect(calendars.rotateFeedToken(id, attacker)).toBeUndefined()
@@ -122,14 +122,14 @@ describe('rotateFeedToken (feed token re-issue, IDOR boundary)', () => {
   })
 
   it('returns undefined for a non-existent calendar id', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-ghost-cal' })
+    const userId = users.upsertUser({ authUserId: 'ws-ghost-cal', accessToken: 'tok', workspaceId: 'ws-ghost-cal' })
     expect(calendars.rotateFeedToken('no-such-id', userId)).toBeUndefined()
   })
 
   // getCalendarByFeedToken(oldToken)===undefined는 DB만 읽어 invalidateFeed 호출과 무관하게 통과 →
   // 캐시를 직접 심고 확인해야 line이 삭제되면 빨간불이 뜬다(#8 stale .ics 회귀 가드).
   it('rotate invalidates the old token feed cache (#8 no stale .ics)', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rot-cache' })
+    const userId = users.upsertUser({ authUserId: 'ws-rot-cache', accessToken: 'tok', workspaceId: 'ws-rot-cache' })
     const { id, feedToken: oldToken } = calendars.createCalendar({
       userId,
       databaseId: 'db-rc',
@@ -145,8 +145,8 @@ describe('rotateFeedToken (feed token re-issue, IDOR boundary)', () => {
 
 describe('listCalendarsByUser (owner isolation)', () => {
   it('returns only the session user calendars, with well-formed feed URLs and parsed mapping', () => {
-    const owner = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-list' })
-    const other = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-list-other' })
+    const owner = users.upsertUser({ authUserId: 'ws-list', accessToken: 'tok', workspaceId: 'ws-list' })
+    const other = users.upsertUser({ authUserId: 'ws-list-other', accessToken: 'tok', workspaceId: 'ws-list-other' })
     const a = calendars.createCalendar({ userId: owner, databaseId: 'db-a', mapping })
     const b = calendars.createCalendar({ userId: owner, databaseId: 'db-b', mapping })
     calendars.createCalendar({ userId: other, databaseId: 'db-c', mapping })
@@ -161,14 +161,14 @@ describe('listCalendarsByUser (owner isolation)', () => {
   })
 
   it('returns an empty array for a user with no calendars', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-empty' })
+    const userId = users.upsertUser({ authUserId: 'ws-empty', accessToken: 'tok', workspaceId: 'ws-empty' })
     expect(calendars.listCalendarsByUser(userId)).toEqual([])
   })
 })
 
 describe('deleteCalendar (IDOR + cache invalidation)', () => {
   it('deletes the row and returns true for the owner', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del' })
+    const userId = users.upsertUser({ authUserId: 'ws-del', accessToken: 'tok', workspaceId: 'ws-del' })
     const { id, feedToken } = calendars.createCalendar({ userId, databaseId: 'db-del', mapping })
 
     expect(calendars.deleteCalendar(id, userId)).toBe(true)
@@ -176,7 +176,7 @@ describe('deleteCalendar (IDOR + cache invalidation)', () => {
   })
 
   it('invalidates the deleted token feed cache (#11 no stale .ics)', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-cache' })
+    const userId = users.upsertUser({ authUserId: 'ws-del-cache', accessToken: 'tok', workspaceId: 'ws-del-cache' })
     const { id, feedToken } = calendars.createCalendar({ userId, databaseId: 'db-dc', mapping })
     setCachedFeed(feedToken, 'STALE-ICS')
 
@@ -186,8 +186,8 @@ describe('deleteCalendar (IDOR + cache invalidation)', () => {
   })
 
   it('refuses to delete a calendar owned by another user (IDOR → false, row kept)', () => {
-    const owner = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-owner' })
-    const attacker = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-attacker' })
+    const owner = users.upsertUser({ authUserId: 'ws-del-owner', accessToken: 'tok', workspaceId: 'ws-del-owner' })
+    const attacker = users.upsertUser({ authUserId: 'ws-del-attacker', accessToken: 'tok', workspaceId: 'ws-del-attacker' })
     const { id, feedToken } = calendars.createCalendar({ userId: owner, databaseId: 'db-di', mapping })
 
     expect(calendars.deleteCalendar(id, attacker)).toBe(false)
@@ -196,14 +196,14 @@ describe('deleteCalendar (IDOR + cache invalidation)', () => {
   })
 
   it('returns false for a non-existent calendar id', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-del-ghost' })
+    const userId = users.upsertUser({ authUserId: 'ws-del-ghost', accessToken: 'tok', workspaceId: 'ws-del-ghost' })
     expect(calendars.deleteCalendar('no-such-id', userId)).toBe(false)
   })
 })
 
 describe('calendar name (#18)', () => {
   it('stores a provided name, trimming whitespace', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-name' })
+    const userId = users.upsertUser({ authUserId: 'ws-name', accessToken: 'tok', workspaceId: 'ws-name' })
     const { feedToken } = calendars.createCalendar({
       userId,
       databaseId: 'db-n',
@@ -214,7 +214,7 @@ describe('calendar name (#18)', () => {
   })
 
   it('falls back to "Notion Calendar" for empty/blank name', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-name-blank' })
+    const userId = users.upsertUser({ authUserId: 'ws-name-blank', accessToken: 'tok', workspaceId: 'ws-name-blank' })
     const { feedToken } = calendars.createCalendar({
       userId,
       databaseId: 'db-nb',
@@ -225,7 +225,7 @@ describe('calendar name (#18)', () => {
   })
 
   it('renames a calendar for the owner', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rename' })
+    const userId = users.upsertUser({ authUserId: 'ws-rename', accessToken: 'tok', workspaceId: 'ws-rename' })
     const { id, feedToken } = calendars.createCalendar({ userId, databaseId: 'db-rn', mapping })
 
     expect(calendars.renameCalendar(id, userId, ' 회의 ')).toEqual({ name: '회의' })
@@ -233,8 +233,8 @@ describe('calendar name (#18)', () => {
   })
 
   it('refuses to rename a calendar owned by another user (IDOR → undefined, no change)', () => {
-    const owner = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rn-owner' })
-    const attacker = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rn-atk' })
+    const owner = users.upsertUser({ authUserId: 'ws-rn-owner', accessToken: 'tok', workspaceId: 'ws-rn-owner' })
+    const attacker = users.upsertUser({ authUserId: 'ws-rn-atk', accessToken: 'tok', workspaceId: 'ws-rn-atk' })
     const { id, feedToken } = calendars.createCalendar({ userId: owner, databaseId: 'db-rni', mapping })
 
     expect(calendars.renameCalendar(id, attacker, 'hijack')).toBeUndefined()
@@ -243,7 +243,7 @@ describe('calendar name (#18)', () => {
 
   // rename은 X-WR-CALNAME이 캐시된 .ics 본문에 있으므로 현재 토큰 캐시를 무효화해야 한다(#8/#11 회귀 가드).
   it('invalidates the feed cache on rename (no stale .ics)', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rn-cache' })
+    const userId = users.upsertUser({ authUserId: 'ws-rn-cache', accessToken: 'tok', workspaceId: 'ws-rn-cache' })
     const { id, feedToken } = calendars.createCalendar({ userId, databaseId: 'db-rnc', mapping })
     setCachedFeed(feedToken, 'STALE-ICS')
 
@@ -253,7 +253,7 @@ describe('calendar name (#18)', () => {
   })
 
   it('returns undefined for a non-existent calendar id', () => {
-    const userId = users.upsertUserByWorkspace({ accessToken: 'tok', workspaceId: 'ws-rn-ghost' })
+    const userId = users.upsertUser({ authUserId: 'ws-rn-ghost', accessToken: 'tok', workspaceId: 'ws-rn-ghost' })
     expect(calendars.renameCalendar('no-such-id', userId, 'x')).toBeUndefined()
   })
 })

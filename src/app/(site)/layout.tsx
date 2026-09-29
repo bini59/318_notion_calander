@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
+import { LOGO_ICONS } from "@/lib/logo";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
   title: "Notion → iCal 브릿지",
   description:
     "Notion 데이터베이스를 표준 iCal(.ics) 구독 피드로 노출합니다. 읽기 전용, Notion이 원본입니다.",
+  icons: { icon: LOGO_ICONS },
 };
 
 export default function RootLayout({

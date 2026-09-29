@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@bini59/design':
+        specifier: github:bini59/324_bini59_design#v0.3.0
+        version: https://codeload.github.com/bini59/324_bini59_design/tar.gz/3f9da87d4ee0774c9edde75e0c7ead91ed810417(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@next/third-parties':
         specifier: ^16.2.10
         version: 16.3.5(next@16.2.10(@babel/core@7.29.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
@@ -222,6 +225,13 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
+
+  '@bini59/design@https://codeload.github.com/bini59/324_bini59_design/tar.gz/3f9da87d4ee0774c9edde75e0c7ead91ed810417':
+    resolution: {tarball: https://codeload.github.com/bini59/324_bini59_design/tar.gz/3f9da87d4ee0774c9edde75e0c7ead91ed810417}
+    version: 0.3.0
+    peerDependencies:
+      react: ^18 || ^19
+      react-dom: ^18 || ^19
 
   '@dotenvx/dotenvx@1.75.1':
     resolution: {integrity: sha512-/BITOC9dmS/edY2zQwZNicQ059O6RKabtQfyEafV0nGtfYRNHYy1DIPiYVcov40+tob9hfmBnbR963dS+EQ1DQ==}
@@ -4323,6 +4333,11 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@bini59/design@https://codeload.github.com/bini59/324_bini59_design/tar.gz/3f9da87d4ee0774c9edde75e0c7ead91ed810417(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
 
   '@dotenvx/dotenvx@1.75.1':
     dependencies:

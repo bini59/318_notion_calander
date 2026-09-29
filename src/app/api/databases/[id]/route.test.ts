@@ -2,11 +2,11 @@ import { NextRequest } from 'next/server'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const readSession = vi.fn()
-const getDecryptedTokenByUserId = vi.fn()
+const getUserByAuthId = vi.fn()
 const getDatabaseProperties = vi.fn()
 
 vi.mock('@/lib/session', () => ({ readSession }))
-vi.mock('@/lib/users', () => ({ getDecryptedTokenByUserId }))
+vi.mock('@/lib/users', () => ({ getUserByAuthId }))
 vi.mock('@/lib/notion', () => ({ getDatabaseProperties }))
 
 let GET: typeof import('./route').GET
@@ -17,7 +17,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   readSession.mockReset()
-  getDecryptedTokenByUserId.mockReset()
+  getUserByAuthId.mockReset()
+  getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
   getDatabaseProperties.mockReset()
 })
 
@@ -34,7 +35,7 @@ describe('GET /api/databases/[id]', () => {
 
   it('returns 401 when the session user no longer exists', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockImplementation(() => {
+    getUserByAuthId.mockImplementation(() => {
       throw new Error('User not found')
     })
     const res = await GET(req(), ctx)
@@ -44,7 +45,7 @@ describe('GET /api/databases/[id]', () => {
 
   it('returns the property list for a valid session', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     getDatabaseProperties.mockResolvedValue([
       { name: 'Name', type: 'title' },
       { name: 'When', type: 'date' },
@@ -59,7 +60,7 @@ describe('GET /api/databases/[id]', () => {
 
   it('forwards select/status options through to the response (#15)', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     getDatabaseProperties.mockResolvedValue([
       { name: 'Status', type: 'status', options: [{ name: 'Todo' }, { name: 'Done' }] },
       { name: 'When', type: 'date' },
@@ -76,7 +77,7 @@ describe('GET /api/databases/[id]', () => {
 
   it('returns 502 without leaking detail when Notion fails', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     getDatabaseProperties.mockRejectedValue(new Error('secret_ntn_leak 429'))
     const res = await GET(req(), ctx)
     expect(res.status).toBe(502)

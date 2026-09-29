@@ -2,11 +2,11 @@ import { NextRequest } from 'next/server'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const readSession = vi.fn()
-const getDecryptedTokenByUserId = vi.fn()
+const getUserByAuthId = vi.fn()
 const searchDatabases = vi.fn()
 
 vi.mock('@/lib/session', () => ({ readSession }))
-vi.mock('@/lib/users', () => ({ getDecryptedTokenByUserId }))
+vi.mock('@/lib/users', () => ({ getUserByAuthId }))
 vi.mock('@/lib/notion', () => ({ searchDatabases }))
 
 let GET: typeof import('./route').GET
@@ -17,7 +17,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   readSession.mockReset()
-  getDecryptedTokenByUserId.mockReset()
+  getUserByAuthId.mockReset()
+  getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
   searchDatabases.mockReset()
 })
 
@@ -33,7 +34,7 @@ describe('GET /api/databases', () => {
 
   it('returns 401 when the session user no longer exists', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockImplementation(() => {
+    getUserByAuthId.mockImplementation(() => {
       throw new Error('User not found')
     })
     const res = await GET(req())
@@ -43,7 +44,7 @@ describe('GET /api/databases', () => {
 
   it('returns the merged database list for a valid session', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     searchDatabases.mockResolvedValue([
       { id: 'db1', title: 'A' },
       { id: 'db2', title: 'B' },
@@ -51,13 +52,13 @@ describe('GET /api/databases', () => {
     const res = await GET(req())
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ databases: [{ id: 'db1', title: 'A' }, { id: 'db2', title: 'B' }] })
-    expect(getDecryptedTokenByUserId).toHaveBeenCalledWith('user-1')
+    expect(getUserByAuthId).toHaveBeenCalledWith('user-1')
     expect(searchDatabases).toHaveBeenCalledWith('tok')
   })
 
   it('returns 502 without leaking detail when Notion fails', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     searchDatabases.mockRejectedValue(new Error('secret_ntn_leak 429'))
     const res = await GET(req())
     expect(res.status).toBe(502)
