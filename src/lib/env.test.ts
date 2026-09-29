@@ -7,11 +7,13 @@ const full = {
   TOKEN_ENC_KEY: 'ab'.repeat(32),
   BASE_URL: 'http://localhost:3000',
   DATABASE_URL: './data/app.db',
+  CLIENT_ID: 'n2c',
+  APP_SECRET: 'app-secret',
 }
 
 describe('validateEnv', () => {
-  it('returns the validated values when all 5 keys are set', () => {
-    expect(validateEnv(full)).toEqual(full)
+  it('returns the validated values, defaulting AUTH_ORIGIN', () => {
+    expect(validateEnv(full)).toEqual({ ...full, AUTH_ORIGIN: 'https://auth.bini59.dev' })
   })
 
   it('throws naming the missing variable', () => {
@@ -34,7 +36,7 @@ describe('validateEnv', () => {
 
   it('names every missing variable at once', () => {
     expect(() => validateEnv({})).toThrow(
-      /NOTION_CLIENT_ID.*NOTION_CLIENT_SECRET.*TOKEN_ENC_KEY.*BASE_URL.*DATABASE_URL/,
+      /NOTION_CLIENT_ID.*NOTION_CLIENT_SECRET.*TOKEN_ENC_KEY.*BASE_URL.*DATABASE_URL.*CLIENT_ID.*APP_SECRET/,
     )
   })
 })

@@ -1,0 +1,40 @@
+@import "@bini59/design/src/base.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* 디자인 시스템 소스를 Tailwind가 스캔하도록 (dist 없이 소스로 배포됨) */
+@source "../../../node_modules/@bini59/design/src";
+
+/* 테마는 <html data-theme>로 전환 — shadcn 계열 dark: 변형도 여기에 맞춘다. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* 남겨둔 shadcn 프리미티브(Select/AlertDialog/ToggleGroup)와 기존 마크업이 쓰는 색 이름을 디자인 토큰에 연결.
+   ponytail: accent는 디자인 시스템(파랑)이 우선 — shadcn의 hover 배경 용도(select 항목)는 파랑으로 보인다. */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--fg);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-fg);
+  --color-secondary: var(--panel-2);
+  --color-secondary-foreground: var(--fg);
+  --color-muted: var(--panel-2);
+  --color-muted-foreground: var(--fg-2);
+  --color-accent-foreground: var(--accent-fg);
+  --color-destructive: var(--danger);
+  --color-border: var(--border);
+  --color-input: var(--border-strong);
+  --color-ring: var(--accent);
+  --radius-2xl: 1.1rem;
+  --radius-3xl: 1.4rem;
+  --radius-4xl: 1.8rem;
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  /* lucide 아이콘: 디자인 Button은 아이콘 크기를 잡아주지 않는다. */
+  button > svg:not([class*="size-"]) { width: 1rem; height: 1rem; flex: none; }
+}

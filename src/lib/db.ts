@@ -15,12 +15,36 @@ function open() {
   return db
 }
 
-// ponytail: 첫 스키마 변경 — guarded ALTER 1개로 충분. 두 번째가 생기면 번호달린 마이그레이션 러너로 승격.
+// ponytail: guarded 마이그레이션 2개. 세 번째가 생기면 번호달린 마이그레이션 러너로 승격.
 // 기존 배포 DB(name 컬럼 없음)에 name을 채운다. CREATE 스키마엔 이미 name이 있으므로 신규 DB는 no-op.
 function migrate(db: Database.Database) {
   const cols = db.pragma('table_info(calendar)') as { name: string }[]
   if (!cols.some((c) => c.name === 'name')) {
     db.exec(`ALTER TABLE calendar ADD COLUMN name TEXT NOT NULL DEFAULT 'Notion Calendar'`)
+  }
+
+  // SSO(321_auth) 도입: user에 auth_user_id를 추가하고 notion_workspace_id UNIQUE를 제거한다
+  // (한 워크스페이스를 여러 auth 사용자가 각자 연결 가능). SQLite는 제약 제거가 안 돼 테이블을 재생성한다.
+  // FK OFF는 트랜잭션 밖에서만 유효 — calendar.user_id가 가리키는 user 이름은 rename 후 그대로 해석된다.
+  const userCols = db.pragma('table_info(user)') as { name: string }[]
+  if (!userCols.some((c) => c.name === 'auth_user_id')) {
+    db.pragma('foreign_keys = OFF')
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE user_new (
+          id TEXT PRIMARY KEY,
+          auth_user_id TEXT UNIQUE,
+          notion_access_token TEXT NOT NULL,
+          notion_workspace_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO user_new (id, notion_access_token, notion_workspace_id, created_at)
+          SELECT id, notion_access_token, notion_workspace_id, created_at FROM user;
+        DROP TABLE user;
+        ALTER TABLE user_new RENAME TO user;
+      `)
+    })()
+    db.pragma('foreign_keys = ON')
   }
 }
 
@@ -29,8 +53,9 @@ function migrate(db: Database.Database) {
 const schema = `
   CREATE TABLE IF NOT EXISTS user (
     id TEXT PRIMARY KEY,
+    auth_user_id TEXT UNIQUE,
     notion_access_token TEXT NOT NULL,
-    notion_workspace_id TEXT NOT NULL UNIQUE,
+    notion_workspace_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS calendar (

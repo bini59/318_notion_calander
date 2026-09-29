@@ -15,7 +15,8 @@ import {
 
 import { Button } from '@/components/ui/button'
 
-const connectHref = '/api/auth/notion'
+// 로그인 여부는 proxy.ts가 판단한다: 미로그인이면 auth.bini59.dev 로그인으로, 로그인이면 바로 설정 화면.
+const connectHref = '/setup'
 
 const steps = [
   {

@@ -4,9 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { autoDetectMapping, type CalendarFilter, type CalendarMapping, type NotionProperty } from '@/lib/mapping'
 import { FilterSection, type FilterRow as FilterRowData } from './FilterRow'
 import Stepper from './Stepper'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { AppShell, Badge, Button, Input, ThemeToggle, type AuthenticatedUser } from '@bini59/design'
+import { LOGO_MARK_URL } from '@/lib/logo'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
@@ -34,7 +33,7 @@ const FILTER_TYPES = ['select', 'status', 'checkbox', 'relation']
 
 // MVP: 통합에 공유된 DB 하나를 골라 → 필드 매핑 → 구독 캘린더 생성 (PLAN §3, 이슈 #5).
 // feed URL은 문자열만 표시 — /feed/{token}.ics 라우트 실체는 #6.
-export default function Setup() {
+function SetupView() {
   const [databases, setDatabases] = useState<Database[] | null>(null)
   const [selected, setSelected] = useState<string>('')
   const [feedUrl, setFeedUrl] = useState<string | null>(null)
@@ -384,8 +383,8 @@ export default function Setup() {
       <Shell current={1}>
         <div className="rounded-lg border border-border bg-card p-6 text-center">
           <p className="mb-4 text-sm text-muted-foreground">Notion이 연결되지 않았습니다.</p>
-          <Button asChild>
-            <a href="/api/auth/notion">Notion 연결하기</a>
+          <Button variant="accent" onClick={() => window.location.assign('/api/auth/notion')}>
+            Notion 연결하기
           </Button>
         </div>
       </Shell>
@@ -399,8 +398,8 @@ export default function Setup() {
         <h1 className="mb-2 text-2xl font-semibold">캘린더가 준비됐어요</h1>
         <p className="mb-6 text-sm text-muted-foreground">아래 링크를 캘린더 앱에 구독으로 추가하면 끝이에요.</p>
         <div className="mb-4 flex flex-col gap-2 sm:flex-row">
-          <Input aria-label="구독 URL" readOnly value={feedUrl} className="font-mono text-xs" />
-          <Button onClick={() => copyUrl(feedUrl, 'complete')}><Copy /><span aria-live="polite">{copied === 'complete' ? '복사했어요' : '링크 복사'}</span></Button>
+          <div className="min-w-0 flex-1"><Input aria-label="구독 URL" readOnly value={feedUrl} className="font-mono text-xs" /></div>
+          <Button variant="accent" onClick={() => copyUrl(feedUrl, 'complete')}><Copy /><span aria-live="polite">{copied === 'complete' ? '복사했어요' : '링크 복사'}</span></Button>
         </div>
         <SubscriptionGuide />
         <p role="alert" className="my-5 rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
@@ -411,7 +410,7 @@ export default function Setup() {
             {error}
           </p>
         )}
-        <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={openDashboard}>내 캘린더로 가기</Button><Button variant="outline" onClick={openCreator}>하나 더 만들기</Button></div>
+        <div className="flex flex-col gap-2 sm:flex-row"><Button variant="accent" onClick={openDashboard}>내 캘린더로 가기</Button><Button variant="default" onClick={openCreator}>하나 더 만들기</Button></div>
       </Shell>
     )
   }
@@ -457,14 +456,14 @@ export default function Setup() {
             {/* 필수 그룹 */}
             <fieldset className="space-y-4">
               <legend className="mb-3 flex items-center gap-2 text-sm font-medium">
-                꼭 필요한 항목 <Badge>필수</Badge>
+                꼭 필요한 항목 <Badge tone="accent">필수</Badge>
               </legend>
 
               <MappingField label="일정 제목" detail="캘린더의 제목(SUMMARY)">
                 <div className="flex items-center gap-2">
                   {/* title은 DB당 1개 → 자동 감지, 변경 불가 */}
                   <span className="text-sm font-medium">{titleProp}</span>
-                  <Badge variant="secondary">자동 선택됨</Badge>
+                  <Badge>자동 선택됨</Badge>
                 </div>
               </MappingField>
 
@@ -482,7 +481,7 @@ export default function Setup() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Badge>필수</Badge>
+                  <Badge tone="accent">필수</Badge>
                 </div>
               </MappingField>
             </fieldset>
@@ -492,7 +491,7 @@ export default function Setup() {
             {/* 선택 그룹 */}
             <fieldset className="space-y-4">
               <legend className="mb-3 flex items-center gap-2 text-sm font-medium">
-                더 넣기 <Badge variant="secondary">선택</Badge>
+                더 넣기 <Badge>선택</Badge>
               </legend>
 
               <MappingField label="종료 날짜" detail="일정의 종료일(DTEND)">
@@ -520,7 +519,7 @@ export default function Setup() {
                     type="single"
                     value={descriptionSource}
                     onValueChange={(v) => v && setDescriptionSource(v as 'property' | 'body')}
-                    variant="outline"
+                    variant="default"
                     className="w-full"
                   >
                     <ToggleGroupItem value="property" className="flex-1">
@@ -604,7 +603,7 @@ export default function Setup() {
             뒤로
           </Button>
           {titleProp && dateProps.length > 0 && (
-            <Button onClick={submit} disabled={!start || submitting}>
+            <Button variant="accent" onClick={submit} disabled={!start || submitting}>
               {submitting ? '생성 중…' : '캘린더 만들기'}
             </Button>
           )}
@@ -618,12 +617,12 @@ export default function Setup() {
       <Shell>
         <div className="mb-7 flex items-center justify-between gap-4">
           <div><h1 className="text-2xl font-semibold">내 캘린더</h1><p className="mt-1 text-sm text-muted-foreground">Notion과 연결된 구독 캘린더를 관리하세요.</p></div>
-          <Button onClick={openCreator}>새 캘린더 만들기</Button>
+          <Button variant="accent" onClick={openCreator}>새 캘린더 만들기</Button>
         </div>
         {error && <p role="alert" className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
         {calendarsLoading && <div role="status" className="space-y-3"><span className="sr-only">캘린더를 불러오는 중입니다.</span><div className="h-44 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"/><div className="h-44 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"/></div>}
-        {error && !calendarsLoading && <Button variant="outline" className="mb-4" onClick={loadCalendars}>다시 시도</Button>}
-        {calendars?.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center"><CalendarDays className="mx-auto mb-3 text-muted-foreground"/><h2 className="font-medium">아직 만든 캘린더가 없어요</h2><p className="my-2 text-sm text-muted-foreground">Notion 데이터베이스를 골라 첫 캘린더를 만들어 보세요.</p><Button className="mt-3" onClick={openCreator}>새 캘린더 만들기</Button></div>}
+        {error && !calendarsLoading && <Button variant="default" className="mb-4" onClick={loadCalendars}>다시 시도</Button>}
+        {calendars?.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center"><CalendarDays className="mx-auto mb-3 text-muted-foreground"/><h2 className="font-medium">아직 만든 캘린더가 없어요</h2><p className="my-2 text-sm text-muted-foreground">Notion 데이터베이스를 골라 첫 캘린더를 만들어 보세요.</p><Button variant="accent" className="mt-3" onClick={openCreator}>새 캘린더 만들기</Button></div>}
         <ul className="space-y-4">
           {calendars?.map((cal) => {
             const dbTitle = databases?.find((db) => db.id === cal.databaseId)?.title ?? 'Notion 데이터베이스'
@@ -635,7 +634,7 @@ export default function Setup() {
                   <ConfirmAction title="캘린더를 삭제할까요?" description="구독 링크가 영구적으로 사라지며 되돌릴 수 없습니다." action="영구 삭제" onConfirm={() => remove(cal.id)}><Button variant="ghost" size="sm" className="w-full justify-start text-destructive"><Trash2/> 삭제</Button></ConfirmAction>
                 </div></details>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row"><Input aria-label={`${cal.name} 구독 URL`} readOnly value={cal.feedUrl} className="font-mono text-xs"/><Button onClick={() => copyUrl(cal.feedUrl, cal.id)}><Copy/><span aria-live="polite">{copied === cal.id ? '복사했어요' : '링크 복사'}</span></Button></div>
+              <div className="flex flex-col gap-2 sm:flex-row"><div className="min-w-0 flex-1"><Input aria-label={`${cal.name} 구독 URL`} readOnly value={cal.feedUrl} className="font-mono text-xs"/></div><Button variant="accent" onClick={() => copyUrl(cal.feedUrl, cal.id)}><Copy/><span aria-live="polite">{copied === cal.id ? '복사했어요' : '링크 복사'}</span></Button></div>
               <details className="mt-3"><summary className="cursor-pointer text-sm font-medium text-primary">캘린더 앱에 추가하는 방법</summary><div className="mt-3"><SubscriptionGuide/></div></details>
             </li>
           })}
@@ -647,7 +646,7 @@ export default function Setup() {
   // 생성 마법사 1단계: DB 선택
   return (
     <Shell current={1}>
-      <div className="mb-6 flex items-start justify-between"><div><h1 className="text-xl font-semibold">캘린더로 만들 데이터베이스를 고르세요</h1><p className="mt-2 text-sm text-muted-foreground">이 연결에 공유한 Notion 데이터베이스만 보여요.</p></div><Button variant="outline" size="sm" onClick={loadDatabases}><RefreshCw/>새로고침</Button></div>
+      <div className="mb-6 flex items-start justify-between"><div><h1 className="text-xl font-semibold">캘린더로 만들 데이터베이스를 고르세요</h1><p className="mt-2 text-sm text-muted-foreground">이 연결에 공유한 Notion 데이터베이스만 보여요.</p></div><Button variant="default" size="sm" onClick={loadDatabases}><RefreshCw/>새로고침</Button></div>
       {error && (
         <p role="alert" className="mb-4 text-sm text-destructive">
           {error}
@@ -655,7 +654,7 @@ export default function Setup() {
       )}
       {databases === null && !error && <div role="status" className="space-y-2"><span className="sr-only">데이터베이스를 불러오는 중입니다.</span><div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"/><div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"/></div>}
       {databases !== null && databases.length === 0 && (
-        <div className="rounded-xl border border-dashed p-8 text-center"><h2 className="font-medium">아직 공유된 데이터베이스가 없어요</h2><p className="my-2 text-sm text-muted-foreground">Notion에서 이 연결에 데이터베이스를 추가하면 여기에 나타납니다.</p><details className="mx-auto my-4 max-w-md text-left text-sm"><summary className="cursor-pointer font-medium">연결 방법 보기</summary><ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground"><li>Notion에서 데이터베이스를 엽니다.</li><li>오른쪽 위 ··· 메뉴에서 연결을 선택합니다.</li><li>이 통합을 찾아 추가한 뒤 여기서 다시 확인합니다.</li></ol></details><Button onClick={loadDatabases}><RefreshCw/>다시 확인</Button></div>
+        <div className="rounded-xl border border-dashed p-8 text-center"><h2 className="font-medium">아직 공유된 데이터베이스가 없어요</h2><p className="my-2 text-sm text-muted-foreground">Notion에서 이 연결에 데이터베이스를 추가하면 여기에 나타납니다.</p><details className="mx-auto my-4 max-w-md text-left text-sm"><summary className="cursor-pointer font-medium">연결 방법 보기</summary><ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground"><li>Notion에서 데이터베이스를 엽니다.</li><li>오른쪽 위 ··· 메뉴에서 연결을 선택합니다.</li><li>이 통합을 찾아 추가한 뒤 여기서 다시 확인합니다.</li></ol></details><Button variant="accent" onClick={loadDatabases}><RefreshCw/>다시 확인</Button></div>
       )}
       {databases !== null && databases.length > 0 && (
         <>
@@ -683,7 +682,7 @@ export default function Setup() {
               </li>
             ))}
           </ul>
-          <div className="sticky bottom-0 -mx-6 flex justify-between border-t bg-background/95 px-6 py-4"><Button variant="ghost" onClick={openDashboard}>취소</Button><Button onClick={loadProperties} disabled={!selected || loadingProps}>
+          <div className="sticky bottom-0 -mx-6 flex justify-between border-t bg-background/95 px-6 py-4"><Button variant="ghost" onClick={openDashboard}>취소</Button><Button variant="accent" onClick={loadProperties} disabled={!selected || loadingProps}>
             {loadingProps ? '불러오는 중…' : '다음'}
           </Button></div>
         </>
@@ -692,13 +691,49 @@ export default function Setup() {
   )
 }
 
-// max-width 640 중앙 컨테이너 + 상단 Stepper. 뷰마다 감싸는 공통 셸.
+// max-width 640 중앙 컨테이너 + 상단 Stepper. 뷰마다 감싸는 공통 셸(<main>은 AppShell이 제공).
 function Shell({ current, children }: { current?: 1 | 2 | 3; children: React.ReactNode }) {
   return (
-    <main className={`mx-auto w-full px-6 py-10 ${current ? 'max-w-[640px]' : 'max-w-[840px]'}`}>
+    <div className={`mx-auto w-full px-6 py-2 ${current ? 'max-w-[640px]' : 'max-w-[840px]'}`}>
       {current && <Stepper current={current} />}
       {children}
-    </main>
+    </div>
+  )
+}
+
+// 로그인 사용자(/api/me)로 AppShell을 구성하고, 기존 화면은 그 안에 렌더한다. 인증 자체는 proxy.ts가 보장.
+export default function Setup() {
+  const [user, setUser] = useState<AuthenticatedUser | null>(null)
+  useEffect(() => {
+    fetch('/api/me')
+      .then((res) => (res.ok ? (res.json() as Promise<AuthenticatedUser>) : null))
+      .then(setUser)
+      .catch(() => setUser(null))
+  }, [])
+
+  async function logout() {
+    await fetch('/api/logout', { method: 'POST' }).catch(() => undefined)
+    window.location.assign('/')
+  }
+
+  return (
+    <AppShell
+      brand={{
+        mark: <img alt="" className="size-full object-cover" src={LOGO_MARK_URL} />,
+        name: 'Notion Calendar',
+        host: 'n2c.bini59.dev',
+        href: '/setup',
+      }}
+      nav={[{ id: 'calendars', label: '내 캘린더', icon: <CalendarDays className="size-4" />, href: '/setup' }]}
+      activeId="calendars"
+      user={user}
+      onLogout={logout}
+      profilePlacement="sidebar"
+      sidebarFoot={<ThemeToggle />}
+      crumb={<strong>내 캘린더</strong>}
+    >
+      <SetupView />
+    </AppShell>
   )
 }
 

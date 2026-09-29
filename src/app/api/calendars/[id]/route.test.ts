@@ -2,12 +2,12 @@ import { NextRequest } from 'next/server'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const readSession = vi.fn()
-const getDecryptedTokenByUserId = vi.fn()
+const getUserByAuthId = vi.fn()
 const deleteCalendar = vi.fn()
 const renameCalendar = vi.fn()
 
 vi.mock('@/lib/session', () => ({ readSession }))
-vi.mock('@/lib/users', () => ({ getDecryptedTokenByUserId }))
+vi.mock('@/lib/users', () => ({ getUserByAuthId }))
 vi.mock('@/lib/calendars', () => ({ deleteCalendar, renameCalendar }))
 
 let DELETE: typeof import('./route').DELETE
@@ -19,7 +19,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   readSession.mockReset()
-  getDecryptedTokenByUserId.mockReset()
+  getUserByAuthId.mockReset()
+  getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
   deleteCalendar.mockReset()
   renameCalendar.mockReset()
 })
@@ -42,7 +43,7 @@ describe('DELETE /api/calendars/[id]', () => {
 
   it('returns 404 when the calendar is not owned by the session user (IDOR → no existence leak)', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     deleteCalendar.mockReturnValue(false)
     const res = await DELETE(req(), params('cal-1'))
     expect(res.status).toBe(404)
@@ -51,7 +52,7 @@ describe('DELETE /api/calendars/[id]', () => {
 
   it('returns 204 with no body for the owner', async () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockReturnValue('tok')
+    getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     deleteCalendar.mockReturnValue(true)
     const res = await DELETE(req(), params('cal-1'))
     expect(res.status).toBe(204)

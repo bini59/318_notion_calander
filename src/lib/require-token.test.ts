@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const readSession = vi.fn()
-const getDecryptedTokenByUserId = vi.fn()
+const getUserByAuthId = vi.fn()
 
 vi.mock('./session', () => ({ readSession }))
-vi.mock('./users', () => ({ getDecryptedTokenByUserId }))
+vi.mock('./users', () => ({ getUserByAuthId }))
 
 let requireToken: typeof import('./require-token').requireToken
 
@@ -15,7 +15,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   readSession.mockReset()
-  getDecryptedTokenByUserId.mockReset()
+  getUserByAuthId.mockReset()
 })
 
 const req = () => new NextRequest('http://localhost:3000/api/x')
@@ -26,12 +26,12 @@ describe('requireToken', () => {
     const r = requireToken(req())
     expect(r).toBeInstanceOf(NextResponse)
     expect((r as NextResponse).status).toBe(401)
-    expect(getDecryptedTokenByUserId).not.toHaveBeenCalled()
+    expect(getUserByAuthId).not.toHaveBeenCalled()
   })
 
-  it('returns a 401 response when the session user no longer exists', () => {
+  it('returns a 401 response when the auth user has not connected Notion', () => {
     readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockImplementation(() => {
+    getUserByAuthId.mockImplementation(() => {
       throw new Error('User not found')
     })
     const r = requireToken(req())
@@ -40,8 +40,8 @@ describe('requireToken', () => {
   })
 
   it('returns userId and accessToken for a valid session', () => {
-    readSession.mockReturnValue('user-1')
-    getDecryptedTokenByUserId.mockReturnValue('tok')
-    expect(requireToken(req())).toEqual({ userId: 'user-1', accessToken: 'tok' })
+    readSession.mockReturnValue('auth-1')
+    getUserByAuthId.mockReturnValue({ id: 'internal-1', accessToken: 'tok' })
+    expect(requireToken(req())).toEqual({ userId: 'internal-1', accessToken: 'tok' })
   })
 })

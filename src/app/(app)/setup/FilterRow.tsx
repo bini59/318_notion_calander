@@ -2,8 +2,7 @@
 // 상태·로딩은 부모가 소유하고 여기선 props로만 렌더 — select/status/checkbox/relation 동작 불변,
 // 마크업만 shadcn 프리미티브로 교체. property는 이름, condition/value는 서버 상한과 동일(value는 문자열 보관).
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button, Input } from '@bini59/design'
 import {
   Select,
   SelectContent,
@@ -163,13 +162,14 @@ export default function FilterRow({
               </SelectContent>
             </Select>
           ) : (
-            <Input
-              aria-label={`필터 ${i + 1} 값`}
-              value={row.value}
-              placeholder="값 (예: Done)"
-              onChange={(e) => onUpdate(i, { value: e.target.value })}
-              className="min-w-32 flex-1"
-            />
+            <div className="min-w-32 flex-1">
+              <Input
+                aria-label={`필터 ${i + 1} 값`}
+                value={row.value}
+                placeholder="값 (예: Done)"
+                onChange={(e) => onUpdate(i, { value: e.target.value })}
+              />
+            </div>
           )}
         </>
       )}
@@ -177,7 +177,7 @@ export default function FilterRow({
       <Button
         type="button"
         variant="ghost"
-        size="icon"
+        size="sm"
         aria-label={`필터 ${i + 1} 삭제`}
         onClick={() => onRemove(i)}
       >
@@ -244,7 +244,7 @@ export function FilterSection({
         </div>
       )}
 
-      <Button type="button" variant="outline" size="sm" onClick={onAdd}>
+      <Button type="button" variant="default" size="sm" onClick={onAdd}>
         + 필터 추가
       </Button>
     </fieldset>
