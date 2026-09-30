@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { autoDetectMapping, type CalendarFilter, type CalendarMapping, type NotionProperty } from '@/lib/mapping'
+import { autoDetectMapping, type CalendarFilter } from '@/lib/mapping'
+import { useServerState, useUser } from './useServerState'
 import { FilterSection, type FilterRow as FilterRowData } from './FilterRow'
 import Stepper from './Stepper'
-import { AppShell, Badge, Button, Input, ThemeToggle, type AuthenticatedUser } from '@bini59/design'
+import { AppShell, Badge, Button, Input, ThemeToggle } from '@bini59/design'
 import { LOGO_MARK_URL } from '@/lib/logo'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -19,11 +20,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-type Database = { id: string; title: string }
-type Calendar = { id: string; name: string; feedUrl: string; databaseId: string; mapping: CalendarMapping }
-// relation(#16) 값 드롭다운 원본: 관련 DB 페이지 목록의 로딩/에러/결과를 property 이름별로 캐시.
-type RelationState = { loading?: boolean; error?: string; options?: { id: string; title: string }[] }
-
 const NONE = '' // "없음(-)" 옵션 값 — 선택 매핑 미지정
 // Radix Select는 빈 문자열 value의 SelectItem을 금지 → "없음"에 센티넬을 쓰고 state는 NONE('') 유지.
 const NONE_OPT = '__none__'
@@ -34,21 +30,21 @@ const FILTER_TYPES = ['select', 'status', 'checkbox', 'relation']
 // MVP: 통합에 공유된 DB 하나를 골라 → 필드 매핑 → 구독 캘린더 생성 (PLAN §3, 이슈 #5).
 // feed URL은 문자열만 표시 — /feed/{token}.ics 라우트 실체는 #6.
 function SetupView() {
-  const [databases, setDatabases] = useState<Database[] | null>(null)
+  // 서버 상태(databases/calendars/properties/relation 옵션/요청 결과)는 훅이 소유 — useServerState.ts 참고.
+  const server = useServerState()
+  const { databases, calendars, calendarsLoading, properties, relationState, needsConnect, error } = server
+
+  // 클라이언트 상태: 위저드 진행, 폼 입력, 일시적 UI 표시.
   const [selected, setSelected] = useState<string>('')
   const [feedUrl, setFeedUrl] = useState<string | null>(null)
-  const [calendars, setCalendars] = useState<Calendar[] | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null) // rotate/delete 진행 중인 항목 id
-  const [error, setError] = useState<string | null>(null)
-  const [needsConnect, setNeedsConnect] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null) // rotate/delete/rename 진행 중인 항목 id
   const [submitting, setSubmitting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
-  const [calendarsLoading, setCalendarsLoading] = useState(true)
-
-  // 매핑 단계 상태 — properties가 로드되면 매핑 폼으로 전환.
-  const [properties, setProperties] = useState<NotionProperty[] | null>(null)
   const [loadingProps, setLoadingProps] = useState(false)
+  const [drafts, setDrafts] = useState<Record<string, string>>({}) // 목록에서 편집 중인 캘린더 이름(id → 입력값)
+
+  // 매핑 단계 폼 상태 — 서버 properties가 로드되면 매핑 폼으로 전환.
   const [name, setName] = useState('') // 캘린더 이름(#18) — DB 제목으로 pre-fill, 빈 값은 서버 폴백
   const [start, setStart] = useState('')
   const [end, setEnd] = useState(NONE)
@@ -57,100 +53,37 @@ function SetupView() {
   const [descriptionSource, setDescriptionSource] = useState<'property' | 'body'>('property')
   const [location, setLocation] = useState(NONE)
   const [filterRows, setFilterRows] = useState<FilterRowData[]>([])
-  // relation 옵션 캐시(#16): property 이름 → 로딩/에러/결과. 행이 relation으로 바뀌면 1회 fetch.
-  const [relationState, setRelationState] = useState<Record<string, RelationState>>({})
 
   const loadDatabases = () => {
-    setDatabases(null)
     setSelected('')
-    setError(null)
-    fetch('/api/databases')
-      .then(async (res) => {
-        if (res.status === 401) {
-          setNeedsConnect(true)
-          return
-        }
-        if (!res.ok) throw new Error('목록을 불러오지 못했습니다')
-        const { databases } = (await res.json()) as { databases: Database[] }
-        setDatabases(databases)
-      })
-      .catch((e: Error) => setError(e.message))
+    server.loadDatabases()
+  }
+  const loadCalendars = () => server.loadCalendars()
+
+  async function withBusy(id: string, fn: () => Promise<unknown>) {
+    setBusyId(id)
+    try {
+      await fn()
+    } finally {
+      setBusyId(null)
+    }
   }
 
-  const loadCalendars = () => {
-    setCalendarsLoading(true)
-    setError(null)
-    fetch('/api/calendars')
-      .then(async (res) => {
-        if (res.status === 401) {
-          setNeedsConnect(true)
-          return
-        }
-        if (!res.ok) throw new Error('캘린더 목록을 불러오지 못했습니다')
-        const { calendars } = (await res.json()) as { calendars: Calendar[] }
-        setCalendars(calendars)
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setCalendarsLoading(false))
-  }
-
-  useEffect(() => {
-    fetch('/api/databases')
-      .then(async (res) => {
-        if (res.status === 401) { setNeedsConnect(true); return }
-        if (!res.ok) throw new Error('목록을 불러오지 못했습니다')
-        const { databases } = (await res.json()) as { databases: Database[] }
-        setDatabases(databases)
-      })
-      .catch((e: Error) => setError(e.message))
-    // initial load only
-  }, [])
-
-  // 기존에 만든 "내 캘린더" 목록 로드 (이슈 #12). DB 목록과 병렬 — 401은 동일하게 재연결 유도.
-  useEffect(() => {
-    fetch('/api/calendars')
-      .then(async (res) => {
-        if (res.status === 401) {
-          setNeedsConnect(true)
-          return
-        }
-        if (!res.ok) throw new Error('캘린더 목록을 불러오지 못했습니다')
-        const { calendars } = (await res.json()) as { calendars: Calendar[] }
-        setCalendars(calendars)
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setCalendarsLoading(false))
-  }, [])
-
-  // ponytail: N+1 회피 — properties는 사용자가 고른 DB 하나만 이 시점에 1회 조회.
   async function loadProperties() {
     if (!selected) return
     setLoadingProps(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/databases/${selected}`)
-      if (res.status === 401) {
-        setNeedsConnect(true)
-        return
-      }
-      if (!res.ok) throw new Error('속성을 불러오지 못했습니다')
-      const { properties } = (await res.json()) as { properties: NotionProperty[] }
-      const auto = autoDetectMapping(properties)
-      // #18: 이름을 선택 DB 제목으로 pre-fill (서버 retrieve-database 왕복 회피, ponytail).
-      setName(databases?.find((d) => d.id === selected)?.title ?? '')
-      setStart(auto.start ?? '')
-      setEnd(NONE)
-      setDescription(NONE)
-      setDescriptionSource('property')
-      setLocation(NONE)
-      setFilterRows([])
-      setRelationState({})
-      setProperties(properties)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoadingProps(false)
-    }
+    const loaded = await server.loadProperties(selected)
+    setLoadingProps(false)
+    if (!loaded) return
+    const auto = autoDetectMapping(loaded)
+    // #18: 이름을 선택 DB 제목으로 pre-fill (서버 retrieve-database 왕복 회피, ponytail).
+    setName(databases?.find((d) => d.id === selected)?.title ?? '')
+    setStart(auto.start ?? '')
+    setEnd(NONE)
+    setDescription(NONE)
+    setDescriptionSource('property')
+    setLocation(NONE)
+    setFilterRows([])
   }
 
   const dateProps = useMemo(
@@ -177,27 +110,15 @@ function SetupView() {
     setFilterRows((rows) => [...rows, { property: '', condition: 'equals', value: '' }])
   const removeRow = (i: number) => setFilterRows((rows) => rows.filter((_, idx) => idx !== i))
 
-  // relation 행(#16)의 관련 페이지 이름 옵션을 property별로 1회 로딩·캐시한다. 신뢰경계: 클라는 관련
-  // DB id를 넘기지 않고 (선택 DB, property)만 보내며 서버가 relatedDatabaseId를 재도출한다.
-  // relationState[name]이 이미 있으면(로딩/성공/에러) 재요청하지 않아 루프를 막는다.
+  // relation 행(#16)이 생기면(클라 상태 filterRows) 서버 상태 훅에 옵션 로딩을 요청한다(property별 1회, 훅이 캐시/가드).
   useEffect(() => {
     const names = [
       ...new Set(
         filterRows.map((r) => r.property).filter((n) => n && typeOfProp(n) === 'relation'),
       ),
     ]
-    names.forEach((name) => {
-      if (relationState[name]) return
-      setRelationState((s) => ({ ...s, [name]: { loading: true } }))
-      fetch(`/api/databases/${selected}/relation-options?property=${encodeURIComponent(name)}`)
-        .then(async (res) => {
-          if (!res.ok) throw new Error('관련 페이지 목록을 불러오지 못했습니다')
-          const { options } = (await res.json()) as { options: { id: string; title: string }[] }
-          setRelationState((s) => ({ ...s, [name]: { options } }))
-        })
-        .catch((e: Error) => setRelationState((s) => ({ ...s, [name]: { error: e.message } })))
-    })
-    // relationState는 가드용으로만 읽어 deps에서 제외(넣으면 매 set마다 재실행). filterRows/selected 변화에만 반응.
+    names.forEach((name) => server.loadRelationOptions(name))
+    // server/relationState는 가드용으로만 읽어 deps에서 제외(넣으면 매 set마다 재실행). filterRows/selected 변화에만 반응.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterRows, selected])
 
@@ -243,7 +164,6 @@ function SetupView() {
   async function submit() {
     if (!titleProp || !start) return
     setSubmitting(true)
-    setError(null)
     try {
       const filters = buildFilters()
       const mapping = {
@@ -259,20 +179,8 @@ function SetupView() {
         ...(location !== NONE ? { location } : {}),
         ...(filters.length ? { filters } : {}),
       }
-      const res = await fetch('/api/calendars', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ databaseId: selected, mapping, name }),
-      })
-      if (res.status === 401) {
-        setNeedsConnect(true)
-        return
-      }
-      const data = (await res.json()) as { id?: string; feedUrl?: string; error?: string }
-      if (!res.ok) throw new Error(data.error ?? '캘린더 생성에 실패했습니다')
-      setFeedUrl(data.feedUrl ?? null)
-    } catch (e) {
-      setError((e as Error).message)
+      const url = await server.createCalendar({ databaseId: selected, mapping, name })
+      if (url !== undefined) setFeedUrl(url)
     } finally {
       setSubmitting(false)
     }
@@ -284,95 +192,41 @@ function SetupView() {
       setCopied(id)
       window.setTimeout(() => setCopied((value) => (value === id ? null : value)), 2000)
     } catch {
-      setError('링크를 복사하지 못했습니다. URL을 직접 선택해 복사해 주세요.')
+      server.setError('링크를 복사하지 못했습니다. URL을 직접 선택해 복사해 주세요.')
     }
   }
 
   function openCreator() {
     setCreating(true)
     setFeedUrl(null)
-    setProperties(null)
+    server.clearProperties()
   }
 
   function openDashboard() {
     setCreating(false)
     setFeedUrl(null)
-    setProperties(null)
+    server.clearProperties()
     setSelected('')
     loadCalendars()
   }
 
-  // 재발급: 기존 URL을 즉시 무효화하므로 확인을 받는다. 성공 시 새 feedUrl로 교체.
+  // 재발급/삭제: 확인을 받은 뒤 서버 상태 훅에 위임(캐시 갱신은 훅이 담당). 진행 표시(busyId)만 여기서 관리.
   // 두 진입점(생성 직후 화면 / 목록 항목)이 동일 함수를 재사용하도록 id를 인자로 받는다(#12).
-  async function rotate(id: string) {
-    setBusyId(id)
-    setError(null)
-    try {
-      const res = await fetch(`/api/calendars/${id}/rotate`, { method: 'POST' })
-      if (res.status === 401) {
-        setNeedsConnect(true)
-        return
-      }
-      const data = (await res.json()) as { feedUrl?: string; error?: string }
-      if (!res.ok) throw new Error(data.error ?? '재발급에 실패했습니다')
-      const newUrl = data.feedUrl ?? null
-      // 목록 항목: 해당 캘린더의 feedUrl만 불변 교체.
-      setCalendars((prev) =>
-        prev ? prev.map((c) => (c.id === id && newUrl ? { ...c, feedUrl: newUrl } : c)) : prev,
-      )
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusyId(null)
-    }
-  }
+  const rotate = (id: string) => withBusy(id, () => server.rotateCalendar(id))
+  const remove = (id: string) => withBusy(id, () => server.deleteCalendar(id))
 
-  // 삭제: 구독 URL을 영구 무효화하므로 확인을 받는다. 성공(204) 시 목록에서 불변 제거(#12).
-  async function remove(id: string) {
-    setBusyId(id)
-    setError(null)
-    try {
-      const res = await fetch(`/api/calendars/${id}`, { method: 'DELETE' })
-      if (res.status === 401) {
-        setNeedsConnect(true)
-        return
+  // 이름 변경(#18): 입력 중인 값은 클라이언트 드래프트(drafts), 저장 성공 시 서버 캐시가 최종 이름으로 갱신되고
+  // 드래프트는 폐기된다. 실패하면 드래프트가 남아 사용자가 다시 시도할 수 있다.
+  const rename = (id: string, value: string) =>
+    withBusy(id, async () => {
+      if (await server.renameCalendar(id, value)) {
+        setDrafts((d) => {
+          const next = { ...d }
+          delete next[id]
+          return next
+        })
       }
-      if (!res.ok) throw new Error('삭제에 실패했습니다')
-      setCalendars((prev) => (prev ? prev.filter((c) => c.id !== id) : prev))
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  // 이름 변경(#18). 목록 Input을 그대로 controlled로 쓰므로 값은 이미 calendars state에 있음 — id만 받아 PATCH.
-  // ponytail: 실패 시 옛 이름으로 revert 안 함(원본 미보관) — 표시 라벨이라 무해, 새로고침이 서버값으로 정정.
-  async function rename(id: string, value: string) {
-    setBusyId(id)
-    setError(null)
-    try {
-      const res = await fetch(`/api/calendars/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: value }),
-      })
-      if (res.status === 401) {
-        setNeedsConnect(true)
-        return
-      }
-      const data = (await res.json()) as { name?: string; error?: string }
-      if (!res.ok) throw new Error(data.error ?? '이름 변경에 실패했습니다')
-      // 서버가 trim/폴백한 최종 이름으로 교체(불변).
-      setCalendars((prev) =>
-        prev ? prev.map((c) => (c.id === id && data.name ? { ...c, name: data.name } : c)) : prev,
-      )
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusyId(null)
-    }
-  }
+    })
 
   // 선택 매핑용 "없음" 센티넬 ↔ NONE('') 변환 Select. state는 NONE 유지 → payload 로직 불변.
   const noneSelectValue = (v: string) => (v === NONE ? NONE_OPT : v)
@@ -599,7 +453,7 @@ function SetupView() {
 
         {/* sticky 푸터 바 */}
         <div className="sticky bottom-0 -mx-6 mt-8 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <Button variant="ghost" onClick={() => setProperties(null)} disabled={submitting}>
+          <Button variant="ghost" onClick={server.clearProperties} disabled={submitting}>
             뒤로
           </Button>
           {titleProp && dateProps.length > 0 && (
@@ -628,8 +482,8 @@ function SetupView() {
             const dbTitle = databases?.find((db) => db.id === cal.databaseId)?.title ?? 'Notion 데이터베이스'
             return <li key={cal.id} className="rounded-xl border bg-card p-5 shadow-sm">
               <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1"><Input aria-label="캘린더 이름" value={cal.name} maxLength={200} onChange={(e) => setCalendars((prev) => prev?.map((c) => c.id === cal.id ? {...c, name:e.target.value}:c) ?? null)} className="max-w-sm font-semibold"/><p className="mt-2 truncate text-xs text-muted-foreground">Notion DB: {dbTitle} · 제목={cal.mapping.title}, 날짜={cal.mapping.start}</p></div>
-                <details className="relative"><summary className="list-none cursor-pointer rounded-md p-2 hover:bg-muted" aria-label="캘린더 더보기"><MoreHorizontal className="size-5"/></summary><div className="absolute right-0 z-10 mt-1 w-44 rounded-lg border bg-popover p-1 shadow-md"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => rename(cal.id, cal.name)} disabled={!cal.name.trim() || busyId === cal.id}>이름 저장</Button>
+                <div className="min-w-0 flex-1"><Input aria-label="캘린더 이름" value={drafts[cal.id] ?? cal.name} maxLength={200} onChange={(e) => setDrafts((d) => ({ ...d, [cal.id]: e.target.value }))} className="max-w-sm font-semibold"/><p className="mt-2 truncate text-xs text-muted-foreground">Notion DB: {dbTitle} · 제목={cal.mapping.title}, 날짜={cal.mapping.start}</p></div>
+                <details className="relative"><summary className="list-none cursor-pointer rounded-md p-2 hover:bg-muted" aria-label="캘린더 더보기"><MoreHorizontal className="size-5"/></summary><div className="absolute right-0 z-10 mt-1 w-44 rounded-lg border bg-popover p-1 shadow-md"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => rename(cal.id, drafts[cal.id] ?? cal.name)} disabled={!(drafts[cal.id] ?? cal.name).trim() || busyId === cal.id}>이름 저장</Button>
                   <ConfirmAction title="새 링크를 발급할까요?" description="기존 링크는 즉시 작동을 멈춰요. 구독한 캘린더 앱에도 새 링크를 다시 추가해야 합니다." action="새 링크 발급" onConfirm={() => rotate(cal.id)}><Button variant="ghost" size="sm" className="w-full justify-start"><RefreshCw/> 링크 재발급</Button></ConfirmAction>
                   <ConfirmAction title="캘린더를 삭제할까요?" description="구독 링크가 영구적으로 사라지며 되돌릴 수 없습니다." action="영구 삭제" onConfirm={() => remove(cal.id)}><Button variant="ghost" size="sm" className="w-full justify-start text-destructive"><Trash2/> 삭제</Button></ConfirmAction>
                 </div></details>
@@ -703,13 +557,7 @@ function Shell({ current, children }: { current?: 1 | 2 | 3; children: React.Rea
 
 // 로그인 사용자(/api/me)로 AppShell을 구성하고, 기존 화면은 그 안에 렌더한다. 인증 자체는 proxy.ts가 보장.
 export default function Setup() {
-  const [user, setUser] = useState<AuthenticatedUser | null>(null)
-  useEffect(() => {
-    fetch('/api/me')
-      .then((res) => (res.ok ? (res.json() as Promise<AuthenticatedUser>) : null))
-      .then(setUser)
-      .catch(() => setUser(null))
-  }, [])
+  const user = useUser()
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST' }).catch(() => undefined)
