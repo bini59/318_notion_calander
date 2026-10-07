@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { decrypt, encrypt } from './crypto'
 import { db } from './db'
+import { invalidateFeed } from './feed-cache'
 
 // access_token은 반드시 encrypt() 거쳐 저장 (PLAN §7, 평문 저장 금지).
 // 사용자 = 321_auth userId(auth_user_id). 같은 사람이 재연결하면 토큰만 갱신해 row id(calendar FK)를 유지한다.
@@ -49,4 +50,19 @@ export function getUserByAuthId(authUserId: string): { id: string; accessToken: 
     .get(authUserId) as { id: string; token: string } | undefined
   if (!row) throw new Error('User not found')
   return { id: row.id, accessToken: decrypt(row.token) }
+}
+
+// 321_auth 탈퇴 반영: 이 사용자의 캘린더와 Notion 토큰을 지우고 피드 캐시도 비운다. 없으면 no-op.
+export function deleteUserByAuthId(authUserId: string): void {
+  const feedTokens = db.transaction((): string[] => {
+    const id = db.prepare('SELECT id FROM user WHERE auth_user_id = ?').pluck().get(authUserId) as
+      | string
+      | undefined
+    if (!id) return []
+    const tokens = db.prepare('SELECT feed_token FROM calendar WHERE user_id = ?').pluck().all(id) as string[]
+    db.prepare('DELETE FROM calendar WHERE user_id = ?').run(id)
+    db.prepare('DELETE FROM user WHERE id = ?').run(id)
+    return tokens
+  })()
+  feedTokens.forEach(invalidateFeed)
 }

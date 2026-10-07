@@ -51,3 +51,28 @@ export async function verifySid(sid: string): Promise<Verdict> {
   cache.set(sid, { exp: Date.now() + TTL_MS, verdict })
   return verdict
 }
+
+// 321_auth 탈퇴 큐 소비: 이 앱이 아직 확인하지 않은 탈퇴자의 데이터를 지우고 ack 한다.
+// 지우기나 ack 가 실패하면 throw — ack 안 된 건은 다음 주기에 다시 내려온다.
+export async function syncDeletions(remove: (authUserId: string) => void): Promise<number> {
+  const env = getEnv()
+  const query = `client_id=${encodeURIComponent(env.CLIENT_ID)}`
+  const headers = { 'x-app-secret': env.APP_SECRET }
+  const res = await fetch(`${env.AUTH_ORIGIN}/deletions?${query}`, {
+    headers,
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!res.ok) throw new Error(`auth deletions failed: ${res.status}`)
+  const { deletions } = (await res.json()) as { deletions: { userId: string }[] }
+  for (const { userId } of deletions) {
+    remove(userId)
+    const ack = await fetch(`${env.AUTH_ORIGIN}/deletions/${encodeURIComponent(userId)}/ack?${query}`, {
+      method: 'POST',
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!ack.ok) throw new Error(`auth deletion ack failed: ${ack.status}`)
+  }
+  return deletions.length
+}
