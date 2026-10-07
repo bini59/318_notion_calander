@@ -72,3 +72,23 @@ describe('getUserByAuthId / getDecryptedTokenByUserId', () => {
     expect(() => users.getDecryptedTokenByUserId('does-not-exist')).toThrow()
   })
 })
+
+describe('deleteUserByAuthId', () => {
+  it('removes the user, their calendars, and leaves other users alone', () => {
+    const gone = users.upsertUser({ authUserId: 'auth-del', accessToken: 't1', workspaceId: 'ws-del' })
+    const kept = users.upsertUser({ authUserId: 'auth-keep', accessToken: 't2', workspaceId: 'ws-keep' })
+    const addCal = db.prepare(
+      "INSERT INTO calendar (id, user_id, name, notion_database_id, mapping, feed_token) VALUES (?, ?, 'c', 'db', '{}', ?)",
+    )
+    addCal.run('cal-del', gone, 'tok-del')
+    addCal.run('cal-keep', kept, 'tok-keep')
+
+    users.deleteUserByAuthId('auth-del')
+    users.deleteUserByAuthId('never-existed')
+
+    expect(() => users.getUserByAuthId('auth-del')).toThrow()
+    expect(db.prepare('SELECT id FROM calendar WHERE user_id = ?').all(gone)).toEqual([])
+    expect(users.getUserByAuthId('auth-keep').id).toBe(kept)
+    expect(db.prepare('SELECT id FROM calendar WHERE user_id = ?').pluck().all(kept)).toEqual(['cal-keep'])
+  })
+})
