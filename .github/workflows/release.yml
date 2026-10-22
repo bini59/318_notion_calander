@@ -10,10 +10,10 @@ permissions:
   packages: write
 
 jobs:
-  # 배포 서버가 arm64(Oracle Ampere)라 이미지도 arm64로 빌드해야 함 → GitHub-hosted(x64) 대신
-  # self-hosted 러너에서 네이티브 빌드. QEMU 에뮬레이션 불필요.
+  # Production (n2c.bini59.dev) is the notion-ical Deployment on the Oracle k3s, deployed by Flux from bini59/homelab
+  # (apps/notion-ical): Flux rolls out the newest sha-<commit>-<unix time> tag, so a release tag is still what ships.
   image:
-    runs-on: [self-hosted]
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +27,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - id: stamp
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -35,6 +38,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=sha
+            type=raw,value=sha-${{ github.sha }}-${{ steps.stamp.outputs.ts }}
             type=raw,value=latest
 
       - name: Build and push image
@@ -45,6 +49,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   release:
     runs-on: ubuntu-latest
@@ -56,18 +62,3 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
-
-  # self-hosted 러너가 이 배포 서버에 등록돼 있어야 함.
-  # 고정 배포 경로 /home/ubuntu/03_personal/318_notion_calander 의 .env + named volume 을 사용한다
-  # (Actions 워크스페이스가 아님). GHCR 이미지가 private일 수 있으니 pull 전 docker login 포함.
-  deploy:
-    runs-on: [self-hosted]
-    needs: image
-    steps:
-      - name: Log in to GHCR
-        run: docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull and restart
-        run: |
-          cd /home/ubuntu/03_personal/318_notion_calander
-          docker compose pull app
-          docker compose up -d app
