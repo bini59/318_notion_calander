@@ -12,6 +12,20 @@ function open() {
   db.pragma('foreign_keys = ON') // 연결 단위 pragma — 매 open마다 필요
   db.exec(schema)
   migrate(db)
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS membership_user_insert BEFORE INSERT ON user
+    WHEN EXISTS (SELECT 1 FROM membership_state WHERE auth_user_id=NEW.auth_user_id AND blocked=1)
+    BEGIN SELECT RAISE(ABORT, 'membership blocked'); END;
+    CREATE TRIGGER IF NOT EXISTS membership_user_update BEFORE UPDATE ON user
+    WHEN EXISTS (SELECT 1 FROM membership_state WHERE auth_user_id=NEW.auth_user_id AND blocked=1)
+    BEGIN SELECT RAISE(ABORT, 'membership blocked'); END;
+    CREATE TRIGGER IF NOT EXISTS membership_calendar_insert BEFORE INSERT ON calendar
+    WHEN EXISTS (SELECT 1 FROM user u JOIN membership_state m ON m.auth_user_id=u.auth_user_id WHERE u.id=NEW.user_id AND m.blocked=1)
+    BEGIN SELECT RAISE(ABORT, 'membership blocked'); END;
+    CREATE TRIGGER IF NOT EXISTS membership_calendar_update BEFORE UPDATE ON calendar
+    WHEN EXISTS (SELECT 1 FROM user u JOIN membership_state m ON m.auth_user_id=u.auth_user_id WHERE u.id=NEW.user_id AND m.blocked=1)
+    BEGIN SELECT RAISE(ABORT, 'membership blocked'); END;
+  `)
   return db
 }
 
@@ -51,6 +65,10 @@ function migrate(db: Database.Database) {
 // PLAN §4 — 이벤트 테이블 없음, Notion이 원본. 멱등 DDL이라 부팅마다 실행해도 안전.
 // ponytail: 마이그레이션 프레임워크 없음 — 스키마 변경이 실제로 생기면 번호달린 마이그레이션으로 승격.
 const schema = `
+  CREATE TABLE IF NOT EXISTS membership_state (
+    auth_user_id TEXT PRIMARY KEY, blocked INTEGER NOT NULL DEFAULT 0, epoch INTEGER NOT NULL DEFAULT 0,
+    owner TEXT, expires INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 0, cleanup_id TEXT, rejoin_version INTEGER
+  );
   CREATE TABLE IF NOT EXISTS user (
     id TEXT PRIMARY KEY,
     auth_user_id TEXT UNIQUE,

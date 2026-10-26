@@ -46,7 +46,7 @@ export function getDecryptedTokenByUserId(userId: string): string {
 // Notion 미연결(행 없음)은 호출부에서 401로 변환하도록 throw.
 export function getUserByAuthId(authUserId: string): { id: string; accessToken: string } {
   const row = db
-    .prepare('SELECT id, notion_access_token AS token FROM user WHERE auth_user_id = ?')
+    .prepare('SELECT id, notion_access_token AS token FROM user WHERE auth_user_id = ? AND NOT EXISTS (SELECT 1 FROM membership_state WHERE membership_state.auth_user_id=user.auth_user_id AND blocked=1)')
     .get(authUserId) as { id: string; token: string } | undefined
   if (!row) throw new Error('User not found')
   return { id: row.id, accessToken: decrypt(row.token) }

@@ -4,6 +4,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 // 라우트가 붙는 실제 계약만 mock — STATE_COOKIE 등 상수는 원본 유지.
 const exchangeCodeForToken = vi.fn()
 const upsertUser = vi.fn()
+const membershipEpoch = vi.fn(() => 0)
+vi.mock('@/lib/membership-store', () => ({ membershipEpoch }))
 
 vi.mock('@/lib/notion-oauth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/notion-oauth')>()),
@@ -37,6 +39,7 @@ beforeAll(async () => {
 beforeEach(() => {
   exchangeCodeForToken.mockReset()
   upsertUser.mockReset()
+  membershipEpoch.mockReset().mockReturnValue(0)
 })
 
 describe('GET /api/auth/notion/callback', () => {
@@ -89,4 +92,12 @@ describe('GET /api/auth/notion/callback', () => {
     // 로그인은 auth의 sid 쿠키 몫 — 이 앱은 더 이상 자체 세션 쿠키를 발급하지 않는다.
     expect(setCookie).not.toMatch(/session=/)
   })
+})
+
+it('rejects an OAuth exchange that finishes after withdrawal/rejoin changed the generation', async () => {
+  membershipEpoch.mockReturnValueOnce(0).mockReturnValueOnce(2)
+  exchangeCodeForToken.mockResolvedValue({ accessToken: 'old-token', workspaceId: 'ws' })
+  const result = await GET(req('?code=c&state=s', 's'))
+  expect(result.status).toBe(502)
+  expect(upsertUser).not.toHaveBeenCalled()
 })

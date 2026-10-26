@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getEnv } from '@/lib/env'
 import { STATE_COOKIE, exchangeCodeForToken } from '@/lib/notion-oauth'
 import { readSession } from '@/lib/session'
+import { membershipEpoch } from '@/lib/membership-store'
 import { upsertUser } from '@/lib/users'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +33,9 @@ export async function GET(req: NextRequest) {
   const authUserId = readSession(req)
   if (!authUserId) return new NextResponse('Unauthorized', { status: 401 })
   try {
+    const epoch = membershipEpoch(authUserId)
     const { accessToken, workspaceId } = await exchangeCodeForToken(code)
+    if (membershipEpoch(authUserId) !== epoch) throw new Error('membership changed')
     upsertUser({ authUserId, accessToken, workspaceId })
   } catch (error) {
     console.error('Notion OAuth callback failed:', error)

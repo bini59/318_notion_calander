@@ -184,3 +184,14 @@ describe("GET /feed/[token].ics — descriptionSource 'body' (#17)", () => {
     expect(fetchPageBodyText).not.toHaveBeenCalled()
   })
 })
+
+it('does not serve or cache an in-flight Notion result after the subscription is withdrawn', async () => {
+  invalidateFeed('withdraw-race')
+  getCalendarByFeedToken.mockReturnValueOnce(calendar).mockReturnValue(undefined)
+  getDecryptedTokenByUserId.mockReturnValue('tok')
+  queryDatabase.mockResolvedValue([page])
+  const result = await GET(new Request('http://x/feed/withdraw-race.ics'), params('withdraw-race.ics'))
+  expect(result.status).toBe(404)
+  const { getCachedFeed } = await import('@/lib/feed-cache')
+  expect(getCachedFeed('withdraw-race')).toBeUndefined()
+})

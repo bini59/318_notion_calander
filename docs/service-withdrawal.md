@@ -1,30 +1,28 @@
-# 서비스 탈퇴 연계 선행 조건 (#26)
+# 서비스 탈퇴 연동 (#26)
 
-현재 상태: **인증 서비스 선행 작업으로 구현 차단**. 동작하지 않는 탈퇴 버튼이나 추정한 API는 추가하지 않는다. 기존 삭제 큐 동기화는 유지한다.
+## 인증 계약
 
-## 확인 근거
+321_auth main `9eafdd80d3d32170ca218922883e8966563d3a5b`의 [membership lifecycle v1](https://github.com/bini59/321_auth/blob/9eafdd80d3d32170ca218922883e8966563d3a5b/docs/membership-lifecycle.md)을 확인해 연동했다. 이전 차단 사유였던 서비스별 탈퇴·정리 ack·명시적 재가입 API가 추가되었다.
 
-2026-10-26에 321_auth main 커밋 `e7cd1fe9f82c420ffed1ebd94a0c080df88373ae`를 읽기 전용으로 확인했다. 운영 배포 버전과 실제 n2c의 `auto_provision` 값은 확인하지 않았으며 변경하지 않았다.
+- 서버 전용 `GET /memberships/identity`, `POST /memberships/withdraw`, `POST /memberships/cleanup/ack`, `POST /memberships/rejoin`을 사용한다. client는 환경 설정, 사용자는 auth 세션으로 결정한다. 브라우저의 사용자 ID는 받지 않는다.
+- 탈퇴는 membership tombstone을 유지한다. 로그인·`/verify`·일반 membership 생성은 탈퇴를 취소하지 않는다. n2c의 auto_provision 설정 변경은 필요하지 않다.
+- 브라우저의 CSRF 쿠키는 auth `GET /me`가 발급한 것을 그대로 전달한다. 변경 요청은 앱의 정확한 Origin 및 double-submit 토큰을 검증하고, 쿠키·헤더·Origin을 auth에 전달한다. secret은 서버에만 있다.
+- 전체 계정 관리 주소는 auth origin의 `/client`다. 전체 계정 삭제는 공통 사용자, 로그인 수단, 모든 membership과 세션을 삭제하며 서비스 로컬 정리는 기존 전체 계정 삭제 큐로 비동기 진행된다. 서비스별 탈퇴에서는 전체 계정 삭제 API를 호출하지 않는다. Notion 원본은 변경하지 않는다.
 
-- [AuthController](https://github.com/bini59/321_auth/blob/e7cd1fe9f82c420ffed1ebd94a0c080df88373ae/apps/api/src/auth/auth.controller.ts): `POST /memberships`는 생성만 지원한다. 사용자용 서비스별 해지 API는 없다. `/verify`와 OAuth 콜백은 `auto_provision`이 켜져 있으면 membership을 생성한다.
-- [MembershipsService](https://github.com/bini59/321_auth/blob/e7cd1fe9f82c420ffed1ebd94a0c080df88373ae/apps/api/src/memberships/memberships.service.ts): `ensure`는 INSERT/ON CONFLICT DO NOTHING이며 탈퇴 상태나 명시적 재가입 처리가 없다. 단순 membership 삭제는 자동 재가입을 막지 못한다.
-- [AccountController](https://github.com/bini59/321_auth/blob/e7cd1fe9f82c420ffed1ebd94a0c080df88373ae/apps/api/src/auth/account.controller.ts): 전체 계정 관리 목적지는 `https://auth.bini59.dev/client`. `POST /account/delete`는 공통 계정 삭제이므로 서비스 탈퇴에 사용할 수 없다.
-- [UsersService](https://github.com/bini59/321_auth/blob/e7cd1fe9f82c420ffed1ebd94a0c080df88373ae/apps/api/src/users/users.service.ts) 및 [스키마](https://github.com/bini59/321_auth/blob/e7cd1fe9f82c420ffed1ebd94a0c080df88373ae/apps/api/src/db/migrations/001_init.sql): 전체 계정 삭제는 공통 사용자와 연결된 로그인 식별자·모든 서비스 membership을 삭제하고, 전체 세션을 해지하며 프로필 이미지를 정리한다. 삭제 큐를 소비하는 서비스의 로컬 데이터는 각 서비스 동기화 시 삭제되므로 즉시 삭제를 보장하는 안내를 해서는 안 된다. Notion 원본 삭제 호출은 없다.
+## 로컬 정리와 경합 방지
 
-## Kevin에게 필요한 선행 작업
+`membership_state`는 기존 SQLite DB에 생성되며 사용자 행 삭제 후에도 남는다. 서비스별 전이는 DB의 60초 lease로 직렬화하고, 로컬 삭제와 상태 변경은 트랜잭션 안에서 owner와 만료 시각을 재검증한다. lease를 잃은 요청은 로컬 데이터를 변경할 수 없다. 프로세스 종료 시 최대 60초 뒤 재시도할 수 있다. 잠금 키는 사용자 단위이며 서비스별 SQLite DB를 공유하는 인스턴스 모두 같은 경계를 사용한다.
 
-321_auth에서 아래 계약을 먼저 구현·검증하고, 배포 버전과 API 계약을 이 이슈에 연결해야 한다. 아래는 요구 사항이며 기존 API나 확정된 URL을 뜻하지 않는다.
+원격 탈퇴 요청 전에 영속 blocked 상태와 epoch를 기록한다. SQLite trigger가 Notion 연결과 캘린더 생성·변경을 차단하며, 기존 피드는 캐시 확인 전에 DB에서 차단한다. 진행 중인 피드 생성은 응답·캐시 저장 전에 다시 확인한다. OAuth 교환은 시작/완료 epoch를 비교해 탈퇴나 재가입을 가로질러 연결을 다시 만들지 못한다. 캘린더 요청이 이전 사용자 ID로 뒤늦게 완료되면 삭제된 사용자에 대한 FK와 소유권 조건으로 새 가입의 데이터에 접근할 수 없다.
 
-1. 세션 본인의 해당 서비스 membership만 해지하는 API. 서비스 secret의 서비스 범위와 사용자 인증을 확인하고 다른 사용자·다른 서비스·공통 계정을 변경하지 않아야 한다. 중복 요청과 네트워크 응답 유실 후 재시도도 안전해야 한다.
-2. 탈퇴를 유지하는 상태와 명시적 동의에 의한 재가입 계약. `/verify`, 로그인 콜백, 일반 membership 생성이 탈퇴를 자동 취소하지 않도록 해야 한다. 기존 `auto_provision` 사용자에 대한 동작 및 n2c 설정 전환 여부도 확정해야 한다.
-3. 해지 성공 후 로컬 삭제 실패 시, membership이 비활성이어도 본인을 인증해 로컬 정리를 재시도할 방법. 현재 앱 proxy는 비활성 membership을 403으로 막으므로 일반 보호 API만으로 재시도할 수 없다.
-4. 서비스별 삭제 이벤트를 제공할 경우 기존 전체 계정 삭제 큐와의 범위·ack·재가입 순서를 명시해야 한다. 과거 이벤트가 재가입 후 새 데이터를 지우지 않도록 해야 한다.
+원격 성공 receipt를 영속 저장한 뒤 현재 auth 회차를 재확인하고 `deleteUserByAuthId`를 호출한다. 로컬 삭제 성공 후에만 같은 회차를 ack한다. 실패하면 성공 응답이나 랜딩 이동 없이 차단 상태를 유지한다. `/api/membership`는 일반 membership 접근 게이트에서 분리되며 매번 auth identity로 본인을 인증하므로 탈퇴 후나 재로그인 후에도 정리를 재시도할 수 있다. 이미 ack된 회차의 삭제는 반복하지 않는다.
 
-## 선행 작업 이후 이 저장소 구현 범위
+명시적 재가입은 정리 완료 후에만 가능하다. 원격 재가입 전에 기대하는 새 version을 영속 저장한다. 응답이 유실되면 다음 본인 상태 조회와 명시적 재시도에서 해당 active version을 확인해 로컬 차단을 해제한다. 오래된 version으로 파괴적 동작을 자동 재발행하지 않는다.
 
-- 설정 계정 영역에 `캘린더 서비스 탈퇴`와 취소 가능한 최종 확인 화면을 추가한다. Notion 연결 정보·캘린더 설정 삭제, 기존 구독 URL 중단, Notion 원본·공통 계정·다른 서비스 가입 유지 내용을 표시한다.
-- 확인 화면 하단에 `다른 서비스에서도 탈퇴하려면 전체 계정 관리로 이동하세요`와 검증된 `/client` 링크를 제공하고 전체 계정 삭제의 별도 영향을 설명한다.
-- 서버에서 본인을 확인하고 요청 위조·중복 제출을 차단한다. 서비스 해지와 `deleteUserByAuthId`(로컬 데이터 및 피드 캐시 삭제)가 모두 성공한 후 랜딩으로 이동한다. 실패는 완료로 표시하지 않고 안전하게 재시도한다.
-- 취소, 미인증, 타 사용자, 요청 위조, 중복 요청, 양쪽 실패 및 재시도, 이전 피드 차단, 다른 사용자 데이터 유지, 로그인 후 자동 재가입 방지, 명시적 재가입, 기존 삭제 큐를 검증한다.
+기존 전체 계정 삭제 큐는 변경하지 않는다. 전체 계정 삭제는 공통 사용자 UUID를 제거하며 다시 생성되는 계정은 새 UUID이므로 과거 전체 삭제 이벤트가 새 계정 데이터를 삭제하지 않는다. 서비스별 삭제 이벤트는 이 auth 계약에서 발행되지 않는다.
+
+## 배포 전 확인
+
+운영 데이터·설정·인프라는 변경하지 않았다. 운영 auth에 위 계약과 `007_membership_withdrawal.sql`이 포함된 버전이 배포되어 있어야 한다. n2c의 Origin 허용 설정과 공유 sid/csrf 쿠키 설정은 실제 환경에서 확인해야 한다. API가 없거나 실패하면 성공으로 표시하지 않는다. 기존 SQLite 영속 디스크 운영 전제를 유지한다.
 
 티켓: https://github.com/bini59/318_notion_calander/issues/26

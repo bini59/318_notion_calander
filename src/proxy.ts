@@ -7,6 +7,12 @@ import { USER_HEADER } from '@/lib/session'
 export async function proxy(req: NextRequest) {
   const { AUTH_ORIGIN, BASE_URL, CLIENT_ID } = getEnv()
   const { pathname, search } = req.nextUrl
+  // Lifecycle routes authenticate the session themselves, including withdrawn memberships.
+  if (pathname === '/api/membership' || pathname === '/account') {
+    const headers = new Headers(req.headers)
+    headers.delete(USER_HEADER)
+    return NextResponse.next({ request: { headers } })
+  }
   const isApi = pathname.startsWith('/api/')
   const sid = req.cookies.get(SID_COOKIE)?.value
 
@@ -28,7 +34,7 @@ export async function proxy(req: NextRequest) {
   if (verdict.status === 403) {
     return isApi
       ? NextResponse.json({ error: 'forbidden' }, { status: 403 })
-      : new NextResponse('접근 권한이 없습니다.', { status: 403 })
+      : NextResponse.redirect(`${BASE_URL}/account`)
   }
   // OAuth 시작/콜백은 브라우저 이동이라 JSON 401이 아니라 로그인 화면으로 보낸다.
   if (isApi && !pathname.startsWith('/api/auth/')) {
@@ -40,4 +46,4 @@ export async function proxy(req: NextRequest) {
   return NextResponse.redirect(login)
 }
 
-export const config = { matcher: ['/setup/:path*', '/api/:path*'] }
+export const config = { matcher: ['/setup/:path*', '/api/:path*', '/account'] }
