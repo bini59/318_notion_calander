@@ -39,9 +39,9 @@ describe('proxy', () => {
     expect((await proxy(req('/api/auth/notion'))).status).toBe(307)
   })
 
-  it('403s an authenticated user without membership', async () => {
+  it('routes an authenticated user without membership to account recovery', async () => {
     verifySid.mockResolvedValue({ status: 403, user: null })
-    expect((await proxy(req('/setup', { cookie: 'sid=s' }))).status).toBe(403)
+    expect((await proxy(req('/setup', { cookie: 'sid=s' }))).headers.get('location')).toBe('https://n2c.bini59.dev/account')
   })
 
   it('503s when auth is unreachable', async () => {
@@ -57,4 +57,11 @@ describe('proxy', () => {
     const res = await proxy(req('/api/calendars', { cookie: 'sid=s', 'x-user-id': 'attacker' }))
     expect(res.headers.get('x-middleware-request-x-user-id')).toBe('real')
   })
+})
+
+it('allows only the exact lifecycle endpoint through without granting a user header', async () => {
+  const result = await proxy(req('/api/membership', { 'x-user-id': 'forged' }))
+  expect(result.headers.get('x-middleware-request-x-user-id')).toBeNull()
+  expect(verifySid).not.toHaveBeenCalled()
+  expect((await proxy(req('/api/membership/other'))).status).toBe(401)
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { autoDetectMapping, type CalendarFilter } from '@/lib/mapping'
 import { useServerState, useUser } from './useServerState'
@@ -581,6 +582,7 @@ export default function Setup() {
       crumb={<strong>내 캘린더</strong>}
     >
       <SetupView />
+      <section aria-label="계정" className="mx-auto max-w-[840px] px-6 py-8"><h2 className="mb-3 font-semibold">계정</h2><Link href="/account" className="text-sm text-destructive underline">캘린더 서비스 탈퇴</Link></section>
     </AppShell>
   )
 }

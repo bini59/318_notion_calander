@@ -142,7 +142,7 @@ export function getCalendarByFeedToken(
 ): { userId: string; name: string; databaseId: string; mapping: CalendarMapping } | undefined {
   const row = db
     .prepare(
-      'SELECT user_id AS userId, name, notion_database_id AS databaseId, mapping FROM calendar WHERE feed_token = ?',
+      'SELECT user_id AS userId, name, notion_database_id AS databaseId, mapping FROM calendar WHERE feed_token = ? AND NOT EXISTS (SELECT 1 FROM user u JOIN membership_state m ON m.auth_user_id=u.auth_user_id WHERE u.id=calendar.user_id AND m.blocked=1)',
     )
     .get(token) as
     | { userId: string; name: string; databaseId: string; mapping: string }
