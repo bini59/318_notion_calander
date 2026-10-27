@@ -40,3 +40,7 @@
 읽기 가능한 `bini59/homelab`의 `apps/auth/auth.yaml`은 `321_auth:sha-9f9b18812009fbe81061126527c58ed0bc90bbf5`를 지정한다. 해당 커밋은 lifecycle 구현 `9eafdd80` 이전이다. 이는 Git에 선언된 설정이며 현재 클러스터의 실제 상태 확인을 대신하지 않는다. 현재 auth main의 lifecycle 구현은 SQLite 트랜잭션과 마이그레이션을 사용하지만, 위 선언에는 PostgreSQL이 포함되어 있다. 운영 담당자는 실제 실행 이미지와 라우팅, DB 종류 및 마이그레이션 호환성을 확인하고 배포된 버전과 공개 경로의 차이를 해결해야 한다. 배포나 DB 변경은 이 저장소에서 수행하지 않았다.
 
 또한 auth의 401은 만료된 세션뿐 아니라 잘못된 client secret이나 비활성 client에도 사용된다. 따라서 identity 401 하나만으로 로그인 만료라고 확정할 수 없다. 실제 client 설정과 `/me` 결과를 함께 확인해야 한다.
+
+### 운영 재확인
+
+운영 수정 후 비로그인 `GET /memberships/identity?client_id=n2c`는 404 대신 401을, n2c의 비로그인 `/api/membership`도 502 대신 401을 반환한다. `homelab`의 auth 이미지 선언은 lifecycle 구현을 포함한 `9eafdd80d3d32170ca218922883e8966563d3a5b`로 바뀌었다. 이는 공개 경로와 비로그인 동작이 개선된 증거이며 실제 로그인 상태의 조회 성공, 쿠키 전달, 정리 흐름 및 화면 검증을 증명하지는 않는다.
