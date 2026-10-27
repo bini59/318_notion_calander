@@ -23,7 +23,7 @@ export default function Account() {
     setLoading(true)
     try {
       const res = await fetch('/api/membership')
-      if (!res.ok) throw new Error(res.status === 401 ? '로그인이 만료되었습니다. 홈에서 다시 로그인해 주세요.' : '가입 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.')
+      if (!res.ok) throw new Error(res.status === 401 ? '로그인 또는 서비스 인증을 확인할 수 없습니다. 홈에서 다시 로그인한 뒤에도 문제가 계속되면 잠시 후 다시 시도해 주세요.' : '가입 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.')
       setState(await res.json())
       setError('')
     } catch (e) { setState(null); setError((e as Error).message) }
@@ -41,7 +41,7 @@ export default function Account() {
     try {
       const token = document.cookie.split('; ').find(v => v.startsWith('csrf='))?.slice(5) ?? ''
       const res = await fetch('/api/membership', { method: 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': decodeURIComponent(token) }, body: JSON.stringify({ action, version: state.version, consent: true }) })
-      if (!res.ok) throw new Error(res.status === 401 ? '로그인이 만료되었습니다. 홈에서 다시 로그인해 주세요.' : '처리하지 못했습니다. 가입 상태를 다시 확인해 주세요.')
+      if (!res.ok) throw new Error(res.status === 401 ? '로그인 또는 서비스 인증을 확인할 수 없습니다. 홈에서 다시 로그인한 뒤에도 문제가 계속되면 잠시 후 다시 시도해 주세요.' : '처리하지 못했습니다. 가입 상태를 다시 확인해 주세요.')
       router.replace(action === 'rejoin' ? '/setup' : '/')
     } catch (e) {
       setError((e as Error).message)

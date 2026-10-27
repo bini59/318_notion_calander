@@ -29,7 +29,7 @@
 
 ## 운영 진단 (이슈 #28)
 
-`[membership]` 로그는 `stage` (identity, me 또는 lifecycle 경로), `kind` (network, http, json, schema), HTTP 상태만 기록한다. 응답 본문, 쿠키, 토큰과 사용자 식별자는 기록하지 않는다. identity의 401과 me의 401은 로그인 만료로 안내하며, 나머지 조회 실패는 재시도 안내를 표시한다. HTTP 403/404나 schema 오류는 배포 계약, CLIENT_ID 및 설정을 확인해야 하며 배포 누락을 뜻한다고 단정할 수 없다.
+`[membership]` 로그는 `stage` (identity, me 또는 lifecycle 경로), `kind` (network, http, json, schema), HTTP 상태만 기록한다. 응답 본문, 쿠키, 토큰과 사용자 식별자는 기록하지 않는다. 401은 로그인 또는 서비스 인증 문제로 안내하며, 나머지 조회 실패는 재시도 안내를 표시한다. HTTP 403/404나 schema 오류는 배포 계약, CLIENT_ID 및 설정을 확인해야 하며 배포 누락을 뜻한다고 단정할 수 없다.
 
 운영 로그인 세션과 서버 로그에 접근할 수 없어 실제 실패 지점은 아직 확인되지 않았다. 운영 담당자가 별도 테스트 계정으로 `/account`와 `/api/membership`을 재현하고 위 로그와 auth 측 응답 상태를 대조해야 한다. auth 배포 버전과 `007_membership_withdrawal.sql` 적용, CLIENT_ID/Origin, 공유 sid/csrf 쿠키 및 `/me`를 확인한 뒤 원인을 수정하고 브라우저 화면과 모바일/데스크톱 스크린샷을 검증해야 한다. 운영 데이터나 설정은 변경하지 않았다.
 
