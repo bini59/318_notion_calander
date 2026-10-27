@@ -157,3 +157,19 @@ it('fences already-authorized writes in SQLite and old user IDs cannot mutate a 
   expect(calendars.renameCalendar('cal-self', oldId, 'stale')).toBeUndefined()
   expect(calendars.getCalendarByFeedToken('new')).toBeDefined()
 })
+it('distinguishes identity, schema and me failures without logging response contents', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const req = () => new NextRequest('http://localhost:3000/api/membership', { headers: { cookie: 'sid=real' } })
+  try {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401 })))
+    expect((await route.GET(req())).status).toBe(401)
+    expect(log).toHaveBeenCalledWith('[membership] upstream request failed', { stage: 'identity', kind: 'http', status: 401 })
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ secret: 'do-not-log' })))
+    expect((await route.GET(req())).status).toBe(502)
+    expect(log).toHaveBeenCalledWith('[membership] invalid response', { stage: 'identity', kind: 'schema' })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new URL(url).pathname === '/me' ? new Response('{}', { status: 503 }) : Response.json(state)))
+    expect((await route.GET(req())).status).toBe(502)
+    expect(log).toHaveBeenCalledWith('[membership] upstream request failed', { stage: 'me', kind: 'http', status: 503 })
+    expect(JSON.stringify(log.mock.calls)).not.toContain('do-not-log')
+  } finally { log.mockRestore() }
+})

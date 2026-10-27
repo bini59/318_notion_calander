@@ -26,3 +26,9 @@
 운영 데이터·설정·인프라는 변경하지 않았다. 운영 auth에 위 계약과 `007_membership_withdrawal.sql`이 포함된 버전이 배포되어 있어야 한다. n2c의 Origin 허용 설정과 공유 sid/csrf 쿠키 설정은 실제 환경에서 확인해야 한다. API가 없거나 실패하면 성공으로 표시하지 않는다. 기존 SQLite 영속 디스크 운영 전제를 유지한다.
 
 티켓: https://github.com/bini59/318_notion_calander/issues/26
+
+## 운영 진단 (이슈 #28)
+
+`[membership]` 로그는 `stage` (identity, me 또는 lifecycle 경로), `kind` (network, http, json, schema), HTTP 상태만 기록한다. 응답 본문, 쿠키, 토큰과 사용자 식별자는 기록하지 않는다. identity의 401과 me의 401은 로그인 만료로 안내하며, 나머지 조회 실패는 재시도 안내를 표시한다. HTTP 403/404나 schema 오류는 배포 계약, CLIENT_ID 및 설정을 확인해야 하며 배포 누락을 뜻한다고 단정할 수 없다.
+
+운영 로그인 세션과 서버 로그에 접근할 수 없어 실제 실패 지점은 아직 확인되지 않았다. 운영 담당자가 별도 테스트 계정으로 `/account`와 `/api/membership`을 재현하고 위 로그와 auth 측 응답 상태를 대조해야 한다. auth 배포 버전과 `007_membership_withdrawal.sql` 적용, CLIENT_ID/Origin, 공유 sid/csrf 쿠키 및 `/me`를 확인한 뒤 원인을 수정하고 브라우저 화면과 모바일/데스크톱 스크린샷을 검증해야 한다. 운영 데이터나 설정은 변경하지 않았다.
