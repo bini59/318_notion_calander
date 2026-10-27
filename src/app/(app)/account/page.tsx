@@ -46,6 +46,10 @@ export default function Account() {
     } catch (e) {
       setError((e as Error).message)
       setConfirmed(false)
+      // A failed response does not prove that the remote transition failed.
+      // Discard the old version and reconcile before offering another action.
+      setState(null)
+      await load()
     } finally { pending.current = false; setBusy(false) }
   }
   const withdrawn = state?.state === 'withdrawn'
