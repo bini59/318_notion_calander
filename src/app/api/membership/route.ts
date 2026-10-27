@@ -16,8 +16,10 @@ export async function GET(req: NextRequest) {
     const state = await membershipRequest(req)
     // Auth issues the browser's double-submit token; never synthesize it on the service server.
     const env = getEnv()
-    const me = await fetch(`${env.AUTH_ORIGIN}/me`, { headers: { cookie: req.headers.get('cookie') ?? '' }, cache: 'no-store', signal: AbortSignal.timeout(5_000) })
-    if (!me.ok) throw new MembershipError(me.status === 401 ? 401 : 502)
+    let me: Response
+    try { me = await fetch(`${env.AUTH_ORIGIN}/me`, { headers: { cookie: req.headers.get('cookie') ?? '' }, cache: 'no-store', signal: AbortSignal.timeout(5_000) }) }
+    catch { console.error('[membership] upstream request failed', { stage: 'me', kind: 'network' }); throw new MembershipError(503) }
+    if (!me.ok) { console.error('[membership] upstream request failed', { stage: 'me', kind: 'http', status: me.status }); throw new MembershipError(me.status === 401 ? 401 : 502) }
     const res = NextResponse.json({ ...state, rejoinRecovery: state.state === 'active' && pendingRejoin(state.userId) === state.version, accountUrl: `${env.AUTH_ORIGIN}/client` })
     for (const cookie of me.headers.getSetCookie()) res.headers.append('set-cookie', cookie)
     res.headers.set('cache-control', 'no-store')
