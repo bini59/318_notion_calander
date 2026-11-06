@@ -82,6 +82,7 @@ describe('POST /api/calendars', () => {
     // 클라가 start를 rich_text 속성으로 위조 → 서버 재검증에서 거부.
     const res = await POST(req({ databaseId: 'db1', mapping: { title: 'Name', start: 'Notes' } }))
     expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ code: 'MAPPING_PROPERTY_TYPE', property: 'Notes', expected: 'date', actual: 'rich_text' })
     expect(createCalendar).not.toHaveBeenCalled()
   })
 
@@ -91,6 +92,7 @@ describe('POST /api/calendars', () => {
     getDatabaseProperties.mockResolvedValue(dbProps)
     const res = await POST(req({ databaseId: 'db1', mapping: { title: 'Name', start: 'Ghost' } }))
     expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ code: 'MAPPING_PROPERTY_MISSING', property: 'Ghost' })
     expect(createCalendar).not.toHaveBeenCalled()
   })
 

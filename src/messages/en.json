@@ -204,5 +204,12 @@
   "membershipError": "Could not update your membership. Please try again.",
   "siteTitle": "Notion Calendar Bridge",
   "appTitle": "My calendars · Notion Calendar Bridge",
-  "metadataDescription": "Connect your Notion databases to read-only iCal subscription feeds."
+  "metadataDescription": "Connect your Notion databases to read-only iCal subscription feeds.",
+  "worksWith": "Works with",
+  "invalidMapping": "Check the database and mapping selections, then try again.",
+  "datePropertyRequired": "Add a date property in Notion, then reload the database properties.",
+  "mappingPropertyMissing": "The mapped property “{property}” no longer exists. Reload the database properties and choose another property.",
+  "filterPropertyMissing": "The filter property “{property}” no longer exists. Reload the database properties and update the filter.",
+  "mappingPropertyType": "The mapped property “{property}” must be type {expected} (currently {actual}). Reload the database properties and update the mapping.",
+  "filterPropertyType": "The filter property “{property}” must be type {expected} (currently {actual}). Reload the database properties and update the filter."
 }

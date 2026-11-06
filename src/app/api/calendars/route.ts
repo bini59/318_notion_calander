@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { createCalendar, listCalendarsByUser } from '@/lib/calendars'
-import { mappingSchema, validateMappingAgainstProperties } from '@/lib/mapping'
+import { mappingSchema, mappingValidationIssue } from '@/lib/mapping'
 import { getDatabaseProperties } from '@/lib/notion'
 import { requireToken } from '@/lib/require-token'
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json({ error: 'databaseId와 유효한 mapping이 필요합니다' }, { status: 400 })
+    return NextResponse.json({ error: 'databaseId와 유효한 mapping이 필요합니다', code: 'INVALID_MAPPING' }, { status: 400 })
   }
   const { databaseId, mapping, name } = parsed.data
 
@@ -39,11 +39,11 @@ export async function POST(req: NextRequest) {
 
     // PLAN §5 필수 가드: date 속성이 하나도 없으면 무의미한 캘린더 생성 차단.
     if (!properties.some((p) => p.type === 'date')) {
-      return NextResponse.json({ error: 'date 속성이 있는 DB만 캘린더로 만들 수 있습니다' }, { status: 400 })
+      return NextResponse.json({ error: 'date 속성이 있는 DB만 캘린더로 만들 수 있습니다', code: 'DATE_PROPERTY_REQUIRED' }, { status: 400 })
     }
 
-    const reason = validateMappingAgainstProperties(mapping, properties)
-    if (reason) return NextResponse.json({ error: reason }, { status: 400 })
+    const issue = mappingValidationIssue(mapping, properties)
+    if (issue) return NextResponse.json(issue, { status: 400 })
 
     const { id, feedUrl, name: savedName } = createCalendar({ userId, databaseId, mapping, name })
     // id는 setup이 재발급(POST /api/calendars/[id]/rotate)에 쓴다 (이슈 #8).

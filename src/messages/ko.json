@@ -204,5 +204,12 @@
   "membershipError": "가입 상태를 변경하지 못했습니다. 다시 시도해 주세요.",
   "siteTitle": "Notion → iCal 브릿지",
   "appTitle": "내 캘린더 · Notion Calendar Bridge",
-  "metadataDescription": "Notion 데이터베이스를 읽기 전용 iCal 구독 피드로 연결합니다."
+  "metadataDescription": "Notion 데이터베이스를 읽기 전용 iCal 구독 피드로 연결합니다.",
+  "worksWith": "연동 서비스",
+  "invalidMapping": "데이터베이스와 매핑 선택을 확인한 후 다시 시도해 주세요.",
+  "datePropertyRequired": "Notion에 날짜 속성을 추가한 후 데이터베이스 속성을 다시 불러와 주세요.",
+  "mappingPropertyMissing": "매핑된 속성 “{property}”이(가) 더 이상 존재하지 않습니다. 데이터베이스 속성을 다시 불러와 다른 속성을 선택해 주세요.",
+  "filterPropertyMissing": "필터 속성 “{property}”이(가) 더 이상 존재하지 않습니다. 데이터베이스 속성을 다시 불러와 필터를 수정해 주세요.",
+  "mappingPropertyType": "매핑된 속성 “{property}”의 타입은 {expected}이어야 합니다 (현재: {actual}). 데이터베이스 속성을 다시 불러와 매핑을 수정해 주세요.",
+  "filterPropertyType": "필터 속성 “{property}”의 타입은 {expected}이어야 합니다 (현재: {actual}). 데이터베이스 속성을 다시 불러와 필터를 수정해 주세요."
 }

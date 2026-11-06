@@ -173,7 +173,7 @@ const faqs = [
             <p>{t('readOnlyNoSeparateEventStorage')}</p>
           </div>
           <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-medium text-muted-foreground">
-            <span className="text-xs font-normal uppercase tracking-wider">Works with</span>
+            <span className="text-xs font-normal uppercase tracking-wider">{t('worksWith')}</span>
             <span>Google Calendar</span><span>Apple Calendar</span><span>Outlook</span>
           </div>
         </div>
