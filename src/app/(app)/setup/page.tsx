@@ -1,12 +1,18 @@
 'use client'
 
+import { Footer } from '@/components/Footer'
+import { AppShell } from '@/components/AppShell'
+import { ThemeToggle } from '@/components/ThemeToggle'
+
+import { useTranslations } from '@/lib/i18n-client'
+
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { autoDetectMapping, type CalendarFilter } from '@/lib/mapping'
 import { useServerState, useUser } from './useServerState'
 import { FilterSection, type FilterRow as FilterRowData } from './FilterRow'
 import Stepper from './Stepper'
-import { AppShell, Badge, Button, Input, ThemeToggle } from '@bini59/design'
+import { Badge, Button, Input } from '@bini59/design'
 import { LOGO_MARK_URL } from '@/lib/logo'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -31,6 +37,7 @@ const FILTER_TYPES = ['select', 'status', 'checkbox', 'relation']
 // MVP: 통합에 공유된 DB 하나를 골라 → 필드 매핑 → 구독 캘린더 생성 (PLAN §3, 이슈 #5).
 // feed URL은 문자열만 표시 — /feed/{token}.ics 라우트 실체는 #6.
 function SetupView() {
+  const t = useTranslations()
   // 서버 상태(databases/calendars/properties/relation 옵션/요청 결과)는 훅이 소유 — useServerState.ts 참고.
   const server = useServerState()
   const { databases, calendars, calendarsLoading, properties, relationState, needsConnect, error } = server
@@ -193,7 +200,7 @@ function SetupView() {
       setCopied(id)
       window.setTimeout(() => setCopied((value) => (value === id ? null : value)), 2000)
     } catch {
-      server.setError('링크를 복사하지 못했습니다. URL을 직접 선택해 복사해 주세요.')
+      server.setError(t('couldNotCopyTheLinkPlease'))
     }
   }
 
@@ -237,10 +244,8 @@ function SetupView() {
     return (
       <Shell current={1}>
         <div className="rounded-lg border border-border bg-card p-6 text-center">
-          <p className="mb-4 text-sm text-muted-foreground">Notion이 연결되지 않았습니다.</p>
-          <Button variant="accent" onClick={() => window.location.assign('/api/auth/notion')}>
-            Notion 연결하기
-          </Button>
+          <p className="mb-4 text-sm text-muted-foreground">{t('notionIsNotConnected')}</p>
+          <Button variant="accent" onClick={() => window.location.assign('/api/auth/notion')}>{t('connectNotion54')} </Button>
         </div>
       </Shell>
     )
@@ -250,22 +255,20 @@ function SetupView() {
     return (
       <Shell current={3}>
         <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary"><Check /></div>
-        <h1 className="mb-2 text-2xl font-semibold">캘린더가 준비됐어요</h1>
-        <p className="mb-6 text-sm text-muted-foreground">아래 링크를 캘린더 앱에 구독으로 추가하면 끝이에요.</p>
+        <h1 className="mb-2 text-2xl font-semibold">{t('yourCalendarIsReady')}</h1>
+        <p className="mb-6 text-sm text-muted-foreground">{t('addTheLinkBelowAsA')}</p>
         <div className="mb-4 flex flex-col gap-2 sm:flex-row">
-          <div className="min-w-0 flex-1"><Input aria-label="구독 URL" readOnly value={feedUrl} className="font-mono text-xs" /></div>
-          <Button variant="accent" onClick={() => copyUrl(feedUrl, 'complete')}><Copy /><span aria-live="polite">{copied === 'complete' ? '복사했어요' : '링크 복사'}</span></Button>
+          <div className="min-w-0 flex-1"><Input aria-label={t('subscriptionUrl')} readOnly value={feedUrl} className="font-mono text-xs" /></div>
+          <Button variant="accent" onClick={() => copyUrl(feedUrl, 'complete')}><Copy /><span aria-live="polite">{copied === 'complete' ? t('copied') : t('copyLink')}</span></Button>
         </div>
         <SubscriptionGuide />
-        <p role="alert" className="my-5 rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
-          이 링크를 아는 사람은 누구나 일정을 볼 수 있어요. 공개적으로 공유하지 마세요. 유출됐다면 관리 화면에서 새 링크를 발급할 수 있습니다.
-        </p>
+        <p role="alert" className="my-5 rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">{t('anyoneWithThisLinkCanSee')} </p>
         {error && (
           <p role="alert" className="mb-4 text-sm text-destructive">
             {error}
           </p>
         )}
-        <div className="flex flex-col gap-2 sm:flex-row"><Button variant="accent" onClick={openDashboard}>내 캘린더로 가기</Button><Button variant="default" onClick={openCreator}>하나 더 만들기</Button></div>
+        <div className="flex flex-col gap-2 sm:flex-row"><Button variant="accent" onClick={openDashboard}>{t('goToMyCalendars')}</Button><Button variant="default" onClick={openCreator}>{t('createAnother')}</Button></div>
       </Shell>
     )
   }
@@ -274,8 +277,8 @@ function SetupView() {
   if (properties !== null) {
     return (
       <Shell current={2}>
-        <h1 className="mb-2 text-xl font-semibold">캘린더에 어떻게 표시할지 정하세요</h1>
-        <p className="mb-6 text-sm text-muted-foreground">Notion의 어떤 속성을 일정의 어떤 부분으로 쓸지 골라주세요.</p>
+        <h1 className="mb-2 text-xl font-semibold">{t('chooseHowEventsAppear')}</h1>
+        <p className="mb-6 text-sm text-muted-foreground">{t('chooseWhichNotionPropertiesToUse')}</p>
         {error && (
           <p role="alert" className="mb-4 text-sm text-destructive">
             {error}
@@ -283,21 +286,14 @@ function SetupView() {
         )}
 
         {dateProps.length === 0 ? (
-          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            이 DB에는 날짜(date) 속성이 없어 캘린더로 만들 수 없습니다. Notion에서 날짜 속성을 추가한
-            뒤 다시 시도하세요.
-          </p>
+          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{t('thisDatabaseHasNoDateProperty')} </p>
         ) : !titleProp ? (
-          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            이 DB에는 제목(title) 속성이 없어 캘린더로 만들 수 없습니다.
-          </p>
+          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{t('thisDatabaseHasNoTitleProperty')} </p>
         ) : (
           <>
             {/* 캘린더 이름(#18) — 캘린더 앱에 표시될 이름(X-WR-CALNAME). DB 제목으로 pre-fill. */}
             <div className="mb-6 space-y-2">
-              <Label htmlFor="cal-name" className="text-sm font-medium">
-                캘린더 이름
-              </Label>
+              <Label htmlFor="cal-name" className="text-sm font-medium">{t('calendarName')} </Label>
               <Input
                 id="cal-name"
                 value={name}
@@ -305,28 +301,27 @@ function SetupView() {
                 placeholder="Notion Calendar"
                 maxLength={200}
               />
-              <p className="text-xs text-muted-foreground">캘린더 앱에 표시될 이름입니다.</p>
+              <p className="text-xs text-muted-foreground">{t('thisNameAppearsInYourCalendar')}</p>
             </div>
 
             {/* 필수 그룹 */}
             <fieldset className="space-y-4">
-              <legend className="mb-3 flex items-center gap-2 text-sm font-medium">
-                꼭 필요한 항목 <Badge tone="accent">필수</Badge>
+              <legend className="mb-3 flex items-center gap-2 text-sm font-medium">{t('requiredFields')} <Badge tone="accent">{t('required')}</Badge>
               </legend>
 
-              <MappingField label="일정 제목" detail="캘린더의 제목(SUMMARY)">
+              <MappingField label={t('eventTitle')} detail={t('calendarTitleSummary')}>
                 <div className="flex items-center gap-2">
                   {/* title은 DB당 1개 → 자동 감지, 변경 불가 */}
                   <span className="text-sm font-medium">{titleProp}</span>
-                  <Badge>자동 선택됨</Badge>
+                  <Badge>{t('selectedAutomatically')}</Badge>
                 </div>
               </MappingField>
 
-              <MappingField label="일정 날짜" detail="일정의 시작일(DTSTART)">
+              <MappingField label={t('eventDate')} detail={t('eventStartDtstart')}>
                 <div className="flex items-center gap-2">
                   <Select value={start} onValueChange={setStart} disabled={dateProps.length === 1}>
-                    <SelectTrigger aria-label="시작일 속성" className="w-full">
-                      <SelectValue placeholder="date 속성 선택" />
+                    <SelectTrigger aria-label={t('startDateProperty')} className="w-full">
+                      <SelectValue placeholder={t('selectADateProperty')} />
                     </SelectTrigger>
                     <SelectContent>
                       {dateProps.map((p) => (
@@ -336,7 +331,7 @@ function SetupView() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Badge tone="accent">필수</Badge>
+                  <Badge tone="accent">{t('required')}</Badge>
                 </div>
               </MappingField>
             </fieldset>
@@ -345,20 +340,19 @@ function SetupView() {
 
             {/* 선택 그룹 */}
             <fieldset className="space-y-4">
-              <legend className="mb-3 flex items-center gap-2 text-sm font-medium">
-                더 넣기 <Badge>선택</Badge>
+              <legend className="mb-3 flex items-center gap-2 text-sm font-medium">{t('addMore')} <Badge>{t('optional')}</Badge>
               </legend>
 
-              <MappingField label="종료 날짜" detail="일정의 종료일(DTEND)">
+              <MappingField label={t('endDate')} detail={t('eventEndDtend')}>
                 <Select
                   value={noneSelectValue(end)}
                   onValueChange={(v) => setEnd(fromNoneSelect(v))}
                 >
-                  <SelectTrigger aria-label="종료일 속성" className="w-full">
-                    <SelectValue placeholder="없음" />
+                  <SelectTrigger aria-label={t('endDateProperty')} className="w-full">
+                    <SelectValue placeholder={t('none')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NONE_OPT}>없음(-)</SelectItem>
+                    <SelectItem value={NONE_OPT}>{t('none84')}</SelectItem>
                     {dateProps.map((p) => (
                       <SelectItem key={p.name} value={p.name}>
                         {p.name}
@@ -368,7 +362,7 @@ function SetupView() {
                 </Select>
               </MappingField>
 
-              <MappingField label="일정 설명" detail="상세 설명(DESCRIPTION)">
+              <MappingField label={t('eventDescription')} detail={t('descriptionDescription')}>
                 <div className="space-y-3">
                   <ToggleGroup
                     type="single"
@@ -377,12 +371,8 @@ function SetupView() {
                     variant="default"
                     className="w-full"
                   >
-                    <ToggleGroupItem value="property" className="flex-1">
-                      속성에서
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="body" className="flex-1">
-                      페이지 본문에서
-                    </ToggleGroupItem>
+                    <ToggleGroupItem value="property" className="flex-1">{t('fromAProperty')} </ToggleGroupItem>
+                    <ToggleGroupItem value="body" className="flex-1">{t('fromThePageBody')} </ToggleGroupItem>
                   </ToggleGroup>
                   {descriptionSource === 'property' ? (
                     <div className="animate-in fade-in slide-in-from-top-1 duration-200">
@@ -390,11 +380,11 @@ function SetupView() {
                         value={noneSelectValue(description)}
                         onValueChange={(v) => setDescription(fromNoneSelect(v))}
                       >
-                        <SelectTrigger aria-label="설명 속성" className="w-full">
-                          <SelectValue placeholder="없음" />
+                        <SelectTrigger aria-label={t('descriptionProperty')} className="w-full">
+                          <SelectValue placeholder={t('none')} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={NONE_OPT}>없음(-)</SelectItem>
+                          <SelectItem value={NONE_OPT}>{t('none84')}</SelectItem>
                           {properties.map((p) => (
                             <SelectItem key={p.name} value={p.name}>
                               {p.name}
@@ -404,23 +394,21 @@ function SetupView() {
                       </Select>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      페이지 본문의 앞부분(최대 몇 블록)을 설명으로 사용합니다.
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t('useTheFirstFewBlocksOf')} </p>
                   )}
                 </div>
               </MappingField>
 
-              <MappingField label="장소" detail="일정 장소(LOCATION)">
+              <MappingField label={t('location')} detail={t('eventLocationLocation')}>
                 <Select
                   value={noneSelectValue(location)}
                   onValueChange={(v) => setLocation(fromNoneSelect(v))}
                 >
-                  <SelectTrigger aria-label="장소 속성" className="w-full">
-                    <SelectValue placeholder="없음" />
+                  <SelectTrigger aria-label={t('locationProperty')} className="w-full">
+                    <SelectValue placeholder={t('none')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NONE_OPT}>없음(-)</SelectItem>
+                    <SelectItem value={NONE_OPT}>{t('none84')}</SelectItem>
                     {properties.map((p) => (
                       <SelectItem key={p.name} value={p.name}>
                         {p.name}
@@ -435,7 +423,7 @@ function SetupView() {
               <>
                 <Separator className="my-6" />
                 <details className="rounded-lg border p-4">
-                  <summary className="cursor-pointer text-sm font-medium">고급: 특정 항목만 보이기</summary>
+                  <summary className="cursor-pointer text-sm font-medium">{t('advancedShowSpecificItems')}</summary>
                   <div className="mt-4"><FilterSection
                   rows={filterRows}
                   filterProps={filterProps}
@@ -454,12 +442,10 @@ function SetupView() {
 
         {/* sticky 푸터 바 */}
         <div className="sticky bottom-0 -mx-6 mt-8 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <Button variant="ghost" onClick={server.clearProperties} disabled={submitting}>
-            뒤로
-          </Button>
+          <Button variant="ghost" onClick={server.clearProperties} disabled={submitting}>{t('back')} </Button>
           {titleProp && dateProps.length > 0 && (
             <Button variant="accent" onClick={submit} disabled={!start || submitting}>
-              {submitting ? '생성 중…' : '캘린더 만들기'}
+              {submitting ? t('creating') : t('createCalendar')}
             </Button>
           )}
         </div>
@@ -470,27 +456,27 @@ function SetupView() {
   if (!creating) {
     return (
       <Shell>
-        <div className="mb-7 flex items-center justify-between gap-4">
-          <div><h1 className="text-2xl font-semibold">내 캘린더</h1><p className="mt-1 text-sm text-muted-foreground">Notion과 연결된 구독 캘린더를 관리하세요.</p></div>
-          <Button variant="accent" onClick={openCreator}>새 캘린더 만들기</Button>
+        <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+          <div><h1 className="text-2xl font-semibold">{t('myCalendars')}</h1><p className="mt-1 text-sm text-muted-foreground">{t('manageSubscriptionCalendarsConnectedToNotion')}</p></div>
+          <Button variant="accent" onClick={openCreator}>{t('createACalendar')}</Button>
         </div>
         {error && <p role="alert" className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-        {calendarsLoading && <div role="status" className="space-y-3"><span className="sr-only">캘린더를 불러오는 중입니다.</span><div className="h-44 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"/><div className="h-44 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"/></div>}
-        {error && !calendarsLoading && <Button variant="default" className="mb-4" onClick={loadCalendars}>다시 시도</Button>}
-        {calendars?.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center"><CalendarDays className="mx-auto mb-3 text-muted-foreground"/><h2 className="font-medium">아직 만든 캘린더가 없어요</h2><p className="my-2 text-sm text-muted-foreground">Notion 데이터베이스를 골라 첫 캘린더를 만들어 보세요.</p><Button variant="accent" className="mt-3" onClick={openCreator}>새 캘린더 만들기</Button></div>}
+        {calendarsLoading && <div role="status" className="space-y-3"><span className="sr-only">{t('loadingCalendars')}</span><div className="h-44 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"/><div className="h-44 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"/></div>}
+        {error && !calendarsLoading && <Button variant="default" className="mb-4" onClick={loadCalendars}>{t('tryAgain')}</Button>}
+        {calendars?.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center"><CalendarDays className="mx-auto mb-3 text-muted-foreground"/><h2 className="font-medium">{t('noCalendarsYet')}</h2><p className="my-2 text-sm text-muted-foreground">{t('chooseANotionDatabaseToCreate')}</p><Button variant="accent" className="mt-3" onClick={openCreator}>{t('createACalendar')}</Button></div>}
         <ul className="space-y-4">
           {calendars?.map((cal) => {
-            const dbTitle = databases?.find((db) => db.id === cal.databaseId)?.title ?? 'Notion 데이터베이스'
+            const dbTitle = databases?.find((db) => db.id === cal.databaseId)?.title ?? t('notionDatabase')
             return <li key={cal.id} className="rounded-xl border bg-card p-5 shadow-sm">
               <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1"><Input aria-label="캘린더 이름" value={drafts[cal.id] ?? cal.name} maxLength={200} onChange={(e) => setDrafts((d) => ({ ...d, [cal.id]: e.target.value }))} className="max-w-sm font-semibold"/><p className="mt-2 truncate text-xs text-muted-foreground">Notion DB: {dbTitle} · 제목={cal.mapping.title}, 날짜={cal.mapping.start}</p></div>
-                <details className="relative"><summary className="list-none cursor-pointer rounded-md p-2 hover:bg-muted" aria-label="캘린더 더보기"><MoreHorizontal className="size-5"/></summary><div className="absolute right-0 z-10 mt-1 w-44 rounded-lg border bg-popover p-1 shadow-md"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => rename(cal.id, drafts[cal.id] ?? cal.name)} disabled={!(drafts[cal.id] ?? cal.name).trim() || busyId === cal.id}>이름 저장</Button>
-                  <ConfirmAction title="새 링크를 발급할까요?" description="기존 링크는 즉시 작동을 멈춰요. 구독한 캘린더 앱에도 새 링크를 다시 추가해야 합니다." action="새 링크 발급" onConfirm={() => rotate(cal.id)}><Button variant="ghost" size="sm" className="w-full justify-start"><RefreshCw/> 링크 재발급</Button></ConfirmAction>
-                  <ConfirmAction title="캘린더를 삭제할까요?" description="구독 링크가 영구적으로 사라지며 되돌릴 수 없습니다." action="영구 삭제" onConfirm={() => remove(cal.id)}><Button variant="ghost" size="sm" className="w-full justify-start text-destructive"><Trash2/> 삭제</Button></ConfirmAction>
+                <div className="min-w-0 flex-1"><Input aria-label={t('calendarName')} value={drafts[cal.id] ?? cal.name} maxLength={200} onChange={(e) => setDrafts((d) => ({ ...d, [cal.id]: e.target.value }))} className="max-w-sm font-semibold"/><p className="mt-2 truncate text-xs text-muted-foreground">Notion DB: {dbTitle} {t('title')}{cal.mapping.title}{t('date')}{cal.mapping.start}</p></div>
+                <details className="relative"><summary className="list-none cursor-pointer rounded-md p-2 hover:bg-muted" aria-label={t('calendarOptions')}><MoreHorizontal className="size-5"/></summary><div className="absolute right-0 z-10 mt-1 w-44 rounded-lg border bg-popover p-1 shadow-md"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => rename(cal.id, drafts[cal.id] ?? cal.name)} disabled={!(drafts[cal.id] ?? cal.name).trim() || busyId === cal.id}>{t('saveName')}</Button>
+                  <ConfirmAction title={t('issueANewLink')} description={t('theOldLinkWillStopWorking')} action={t('issueNewLink')} onConfirm={() => rotate(cal.id)}><Button variant="ghost" size="sm" className="w-full justify-start"><RefreshCw/> {t('issueNewLink112')}</Button></ConfirmAction>
+                  <ConfirmAction title={t('deleteCalendar')} description={t('theSubscriptionLinkWillBePermanently')} action={t('deletePermanently')} onConfirm={() => remove(cal.id)}><Button variant="ghost" size="sm" className="w-full justify-start text-destructive"><Trash2/> {t('delete')}</Button></ConfirmAction>
                 </div></details>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row"><div className="min-w-0 flex-1"><Input aria-label={`${cal.name} 구독 URL`} readOnly value={cal.feedUrl} className="font-mono text-xs"/></div><Button variant="accent" onClick={() => copyUrl(cal.feedUrl, cal.id)}><Copy/><span aria-live="polite">{copied === cal.id ? '복사했어요' : '링크 복사'}</span></Button></div>
-              <details className="mt-3"><summary className="cursor-pointer text-sm font-medium text-primary">캘린더 앱에 추가하는 방법</summary><div className="mt-3"><SubscriptionGuide/></div></details>
+              <div className="flex flex-col gap-2 sm:flex-row"><div className="min-w-0 flex-1"><Input aria-label={t('calendarUrl').replace('{name}', cal.name)} readOnly value={cal.feedUrl} className="font-mono text-xs"/></div><Button variant="accent" onClick={() => copyUrl(cal.feedUrl, cal.id)}><Copy/><span aria-live="polite">{copied === cal.id ? t('copied') : t('copyLink')}</span></Button></div>
+              <details className="mt-3"><summary className="cursor-pointer text-sm font-medium text-primary">{t('howToAddToACalendar')}</summary><div className="mt-3"><SubscriptionGuide/></div></details>
             </li>
           })}
         </ul>
@@ -501,19 +487,19 @@ function SetupView() {
   // 생성 마법사 1단계: DB 선택
   return (
     <Shell current={1}>
-      <div className="mb-6 flex items-start justify-between"><div><h1 className="text-xl font-semibold">캘린더로 만들 데이터베이스를 고르세요</h1><p className="mt-2 text-sm text-muted-foreground">이 연결에 공유한 Notion 데이터베이스만 보여요.</p></div><Button variant="default" size="sm" onClick={loadDatabases}><RefreshCw/>새로고침</Button></div>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">{t('chooseADatabaseForYourCalendar')}</h1><p className="mt-2 text-sm text-muted-foreground">{t('onlyDatabasesSharedWithThisConnection')}</p></div><Button variant="default" size="sm" onClick={loadDatabases}><RefreshCw/>{t('refresh')}</Button></div>
       {error && (
         <p role="alert" className="mb-4 text-sm text-destructive">
           {error}
         </p>
       )}
-      {databases === null && !error && <div role="status" className="space-y-2"><span className="sr-only">데이터베이스를 불러오는 중입니다.</span><div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"/><div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"/></div>}
+      {databases === null && !error && <div role="status" className="space-y-2"><span className="sr-only">{t('loadingDatabases')}</span><div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"/><div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"/></div>}
       {databases !== null && databases.length === 0 && (
-        <div className="rounded-xl border border-dashed p-8 text-center"><h2 className="font-medium">아직 공유된 데이터베이스가 없어요</h2><p className="my-2 text-sm text-muted-foreground">Notion에서 이 연결에 데이터베이스를 추가하면 여기에 나타납니다.</p><details className="mx-auto my-4 max-w-md text-left text-sm"><summary className="cursor-pointer font-medium">연결 방법 보기</summary><ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground"><li>Notion에서 데이터베이스를 엽니다.</li><li>오른쪽 위 ··· 메뉴에서 연결을 선택합니다.</li><li>이 통합을 찾아 추가한 뒤 여기서 다시 확인합니다.</li></ol></details><Button variant="accent" onClick={loadDatabases}><RefreshCw/>다시 확인</Button></div>
+        <div className="rounded-xl border border-dashed p-8 text-center"><h2 className="font-medium">{t('noSharedDatabasesYet')}</h2><p className="my-2 text-sm text-muted-foreground">{t('addADatabaseToThisConnection')}</p><details className="mx-auto my-4 max-w-md text-left text-sm"><summary className="cursor-pointer font-medium">{t('howToConnect')}</summary><ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground"><li>{t('openTheDatabaseInNotion')}</li><li>{t('chooseConnectionsFromTheMenuIn')}</li><li>{t('findAndAddThisIntegrationThen')}</li></ol></details><Button variant="accent" onClick={loadDatabases}><RefreshCw/>{t('checkAgain')}</Button></div>
       )}
       {databases !== null && databases.length > 0 && (
         <>
-          <ul className="mb-6 space-y-2" role="radiogroup" aria-label="Notion DB 선택">
+          <ul className="mb-6 space-y-2" role="radiogroup" aria-label={t('chooseANotionDatabase')}>
             {databases.map((db) => (
               <li key={db.id}>
                 <label
@@ -532,13 +518,13 @@ function SetupView() {
                     onChange={() => setSelected(db.id)}
                     className="accent-primary"
                   />
-                  {db.title || '(제목 없음)'}
+                  {db.title || t('untitled')}
                 </label>
               </li>
             ))}
           </ul>
-          <div className="sticky bottom-0 -mx-6 flex justify-between border-t bg-background/95 px-6 py-4"><Button variant="ghost" onClick={openDashboard}>취소</Button><Button variant="accent" onClick={loadProperties} disabled={!selected || loadingProps}>
-            {loadingProps ? '불러오는 중…' : '다음'}
+          <div className="sticky bottom-0 -mx-6 flex justify-between border-t bg-background/95 px-6 py-4"><Button variant="ghost" onClick={openDashboard}>{t('cancel')}</Button><Button variant="accent" onClick={loadProperties} disabled={!selected || loadingProps}>
+            {loadingProps ? t('loading') : t('next')}
           </Button></div>
         </>
       )}
@@ -558,6 +544,7 @@ function Shell({ current, children }: { current?: 1 | 2 | 3; children: React.Rea
 
 // 로그인 사용자(/api/me)로 AppShell을 구성하고, 기존 화면은 그 안에 렌더한다. 인증 자체는 proxy.ts가 보장.
 export default function Setup() {
+  const t = useTranslations()
   const user = useUser()
 
   async function logout() {
@@ -573,16 +560,17 @@ export default function Setup() {
         host: 'n2c.bini59.dev',
         href: '/setup',
       }}
-      nav={[{ id: 'calendars', label: '내 캘린더', icon: <CalendarDays className="size-4" />, href: '/setup' }]}
+      nav={[{ id: 'calendars', label: t('myCalendars'), icon: <CalendarDays className="size-4" />, href: '/setup' }]}
       activeId="calendars"
       user={user}
       onLogout={logout}
       profilePlacement="sidebar"
       sidebarFoot={<ThemeToggle />}
-      crumb={<strong>내 캘린더</strong>}
+      crumb={<strong>{t('myCalendars')}</strong>}
     >
       <SetupView />
-      <section aria-label="계정" className="mx-auto max-w-[840px] px-6 py-8"><h2 className="mb-3 font-semibold">계정</h2><Link href="/account" className="text-sm text-destructive underline">캘린더 서비스 탈퇴</Link></section>
+      <section aria-label={t('account')} className="mx-auto max-w-[840px] px-6 py-8"><h2 className="mb-3 font-semibold">{t('account')}</h2><Link href="/account" className="text-sm text-destructive underline">{t('leaveTheCalendarService')}</Link></section>
+      <Footer />
     </AppShell>
   )
 }
@@ -597,13 +585,15 @@ function MappingField({ label, detail, children }: { label: string; detail: stri
 }
 
 function SubscriptionGuide() {
+  const t = useTranslations()
   return <div className="grid gap-2 sm:grid-cols-3">
-    <div className="rounded-lg border p-3"><strong className="text-sm">Google</strong><p className="mt-1 text-xs text-muted-foreground">다른 캘린더 + → URL로 추가에 링크를 붙여넣으세요.</p></div>
-    <div className="rounded-lg border p-3"><strong className="text-sm">Apple</strong><p className="mt-1 text-xs text-muted-foreground">파일 → 새로운 캘린더 구독에 링크를 붙여넣으세요.</p></div>
-    <div className="rounded-lg border p-3"><strong className="text-sm">Outlook</strong><p className="mt-1 text-xs text-muted-foreground">캘린더 추가 → 웹에서 구독에 링크를 붙여넣으세요.</p></div>
+    <div className="rounded-lg border p-3"><strong className="text-sm">Google</strong><p className="mt-1 text-xs text-muted-foreground">{t('pasteTheLinkUnderOtherCalendars')}</p></div>
+    <div className="rounded-lg border p-3"><strong className="text-sm">Apple</strong><p className="mt-1 text-xs text-muted-foreground">{t('pasteTheLinkUnderFileNew')}</p></div>
+    <div className="rounded-lg border p-3"><strong className="text-sm">Outlook</strong><p className="mt-1 text-xs text-muted-foreground">{t('pasteTheLinkUnderAddCalendar')}</p></div>
   </div>
 }
 
 function ConfirmAction({ title, description, action, onConfirm, children }: { title: string; description: string; action: string; onConfirm: () => void; children: React.ReactNode }) {
-  return <AlertDialog><AlertDialogTrigger asChild>{children}</AlertDialogTrigger><AlertDialogContent><AlertDialogTitle>{title}</AlertDialogTitle><AlertDialogDescription>{description}</AlertDialogDescription><div className="mt-6 flex justify-end gap-2"><AlertDialogCancel/><AlertDialogAction onClick={onConfirm}>{action}</AlertDialogAction></div></AlertDialogContent></AlertDialog>
+  const t = useTranslations()
+  return <AlertDialog><AlertDialogTrigger asChild>{children}</AlertDialogTrigger><AlertDialogContent><AlertDialogTitle>{title}</AlertDialogTitle><AlertDialogDescription>{description}</AlertDialogDescription><div className="mt-6 flex justify-end gap-2"><AlertDialogCancel>{t('cancel')}</AlertDialogCancel><AlertDialogAction onClick={onConfirm}>{action}</AlertDialogAction></div></AlertDialogContent></AlertDialog>
 }

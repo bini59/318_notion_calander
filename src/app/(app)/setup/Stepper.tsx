@@ -1,18 +1,20 @@
+import { useTranslations } from '@/lib/i18n-client'
 import { cn } from '@/lib/utils'
 
 // 3단계 시각 인디케이터 (DB 선택 → 필드 매핑 → 완료). 상태를 소유하지 않는 순수 컴포넌트 —
 // current는 부모의 기존 뷰 분기에서 파생된다(목록=1, properties!==null=2, feedUrl=3).
-const STEPS = ['DB 선택', '필드 매핑', '완료'] as const
 
 export default function Stepper({ current }: { current: 1 | 2 | 3 }) {
+  const t = useTranslations()
+  const STEPS = [t('chooseDatabase'), t('mapFields'), t('done')] as const
   return (
-    <ol className="mb-8 flex items-center gap-2" aria-label="진행 단계">
+    <ol className="mb-8 flex items-center gap-2" aria-label={t('progress')}>
       {STEPS.map((label, i) => {
         const step = (i + 1) as 1 | 2 | 3
         const active = step === current
         const done = step < current
         return (
-          <li key={label} className="flex flex-1 items-center gap-2">
+          <li key={label} className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
             <span
               className={cn(
                 'flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium transition-colors',
@@ -26,7 +28,7 @@ export default function Stepper({ current }: { current: 1 | 2 | 3 }) {
             </span>
             <span
               className={cn(
-                'text-sm whitespace-nowrap',
+                'text-xs leading-tight sm:text-sm',
                 active ? 'font-medium text-foreground' : 'text-muted-foreground',
               )}
             >
