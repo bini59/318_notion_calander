@@ -3,6 +3,8 @@
 // 서버 상태 전담(TanStack Query). 폼 입력·위저드 단계·복사 표시 같은 클라이언트 상태는 page.tsx가 소유하고,
 // 여기선 조회 캐시 + 변경 후 캐시 갱신만 한다. 반환 형태는 page.tsx가 그대로 쓰도록 유지.
 
+import { useTranslations } from '@/lib/i18n-client'
+import { serverErrorMessage } from './serverError'
 import { useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AuthenticatedUser } from '@bini59/design'
@@ -15,12 +17,12 @@ export type RelationState = { loading?: boolean; error?: string; options?: { id:
 
 class Unauthorized extends Error {}
 
-// fetch 래퍼: 401 → Unauthorized, 비정상 응답 → Error. 변경 요청(init 있음)만 서버가 준 error 메시지를 노출한다.
-async function call<T>(url: string, fallback: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
+// 401 triggers reconnect; recognized validation errors are localized without exposing server messages.
+async function call<T>(url: string, fallback: string, t: ReturnType<typeof useTranslations>, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init).catch(() => { throw new Error(fallback) })
   if (res.status === 401) throw new Unauthorized()
   const data = (await res.json().catch(() => ({}))) as T & { error?: string }
-  if (!res.ok) throw new Error((init && data.error) || fallback)
+  if (!res.ok) throw new Error(serverErrorMessage(data, fallback, t))
   return data
 }
 const json = (body: unknown, method = 'POST'): RequestInit => ({
@@ -29,10 +31,12 @@ const json = (body: unknown, method = 'POST'): RequestInit => ({
   body: JSON.stringify(body),
 })
 
-const fetchProperties = (id: string) =>
-  call<{ properties: NotionProperty[] }>(`/api/databases/${id}`, '속성을 불러오지 못했습니다').then((d) => d.properties)
 
 export function useServerState() {
+  const t = useTranslations()
+  const fetchProperties = (id: string) =>
+    call<{ properties: NotionProperty[] }>(`/api/databases/${id}`, t('couldNotLoadProperties'), t).then((d) => d.properties)
+
   const qc = useQueryClient()
   const [actionError, setError] = useState<string | null>(null)
   const [unauthorized, setUnauthorized] = useState(false)
@@ -42,11 +46,11 @@ export function useServerState() {
 
   const dbQ = useQuery({
     queryKey: ['databases'],
-    queryFn: () => call<{ databases: Database[] }>('/api/databases', '목록을 불러오지 못했습니다').then((d) => d.databases),
+    queryFn: () => call<{ databases: Database[] }>('/api/databases', t('couldNotLoadDatabases'), t).then((d) => d.databases),
   })
   const calQ = useQuery({
     queryKey: ['calendars'],
-    queryFn: () => call<{ calendars: Calendar[] }>('/api/calendars', '캘린더 목록을 불러오지 못했습니다').then((d) => d.calendars),
+    queryFn: () => call<{ calendars: Calendar[] }>('/api/calendars', t('couldNotLoadCalendars'), t).then((d) => d.calendars),
   })
   // staleTime Infinity: 마운트/포커스 재조회 없이, 갱신은 loadProperties의 명시적 fetchQuery로만.
   const propsQ = useQuery({
@@ -62,7 +66,7 @@ export function useServerState() {
       queryFn: () =>
         call<{ options: { id: string; title: string }[] }>(
           `/api/databases/${activeDb}/relation-options?property=${encodeURIComponent(name)}`,
-          '관련 페이지 목록을 불러오지 못했습니다',
+          t('couldNotLoadRelatedPages'), t,
         ),
       enabled: !!activeDb,
       staleTime: Infinity,
@@ -118,23 +122,23 @@ export function useServerState() {
 
   const create = useMutation({
     mutationFn: (body: { databaseId: string; mapping: unknown; name: string }) =>
-      call<{ feedUrl?: string }>('/api/calendars', '캘린더 생성에 실패했습니다', json(body)),
+      call<{ feedUrl?: string }>('/api/calendars', t('couldNotCreateTheCalendar'), t, json(body)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['calendars'] }),
   })
   const rotate = useMutation({
-    mutationFn: (id: string) => call<{ feedUrl?: string }>(`/api/calendars/${id}/rotate`, '재발급에 실패했습니다', { method: 'POST' }),
+    mutationFn: (id: string) => call<{ feedUrl?: string }>(`/api/calendars/${id}/rotate`, t('couldNotIssueANewLink'), t, { method: 'POST' }),
     onSuccess: ({ feedUrl }, id) => {
       if (feedUrl) patch(id, { feedUrl })
     },
   })
   const del = useMutation({
-    mutationFn: (id: string) => call(`/api/calendars/${id}`, '삭제에 실패했습니다', { method: 'DELETE' }),
+    mutationFn: (id: string) => call(`/api/calendars/${id}`, t('couldNotDeleteTheCalendar'), t, { method: 'DELETE' }),
     onSuccess: (_, id) => setCalendars((l) => l.filter((c) => c.id !== id)),
   })
   // 서버가 trim/폴백한 최종 이름으로 교체.
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
-      call<{ name?: string }>(`/api/calendars/${id}`, '이름 변경에 실패했습니다', json({ name }, 'PATCH')),
+      call<{ name?: string }>(`/api/calendars/${id}`, t('couldNotRenameTheCalendar'), t, json({ name }, 'PATCH')),
     onSuccess: (d, { id }) => {
       if (d.name) patch(id, { name: d.name })
     },

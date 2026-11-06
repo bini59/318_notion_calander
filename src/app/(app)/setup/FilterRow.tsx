@@ -1,3 +1,4 @@
+import { useTranslations } from '@/lib/i18n-client'
 // 필터(#13/#16) UI. setup/page.tsx의 per-row JSX를 순수 컴포넌트로 추출(page.tsx 축소).
 // 상태·로딩은 부모가 소유하고 여기선 props로만 렌더 — select/status/checkbox/relation 동작 불변,
 // 마크업만 shadcn 프리미티브로 교체. property는 이름, condition/value는 서버 상한과 동일(value는 문자열 보관).
@@ -51,6 +52,7 @@ export default function FilterRow({
   onUpdate,
   onRemove,
 }: RowProps) {
+  const t = useTranslations()
   const rowType = typeOfProp(row.property)
   const relationNeedsValue =
     rowType === 'relation' && !RELATION_EMPTY_CONDS.includes(row.condition as 'is_empty')
@@ -71,8 +73,8 @@ export default function FilterRow({
           onUpdate(i, patch)
         }}
       >
-        <SelectTrigger aria-label={`필터 ${i + 1} 속성`} className="min-w-36 flex-1" size="sm">
-          <SelectValue placeholder="속성 선택" />
+        <SelectTrigger aria-label={t('filterProperty').replace('{n}', String(i + 1))} className="min-w-36 flex-1" size="sm">
+          <SelectValue placeholder={t('selectAProperty')} />
         </SelectTrigger>
         <SelectContent>
           {filterProps.map((p) => (
@@ -88,12 +90,12 @@ export default function FilterRow({
           value={row.value}
           onValueChange={(value) => onUpdate(i, { value })}
         >
-          <SelectTrigger aria-label={`필터 ${i + 1} 값`} className="min-w-32 flex-1" size="sm">
+          <SelectTrigger aria-label={t('filterValue').replace('{n}', String(i + 1))} className="min-w-32 flex-1" size="sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="true">체크됨</SelectItem>
-            <SelectItem value="false">체크 안 됨</SelectItem>
+            <SelectItem value="true">{t('checked')}</SelectItem>
+            <SelectItem value="false">{t('unchecked')}</SelectItem>
           </SelectContent>
         </Select>
       ) : rowType === 'relation' ? (
@@ -102,32 +104,32 @@ export default function FilterRow({
             value={row.condition}
             onValueChange={(v) => onUpdate(i, { condition: v as FilterRowCondition })}
           >
-            <SelectTrigger aria-label={`필터 ${i + 1} 조건`} className="min-w-28" size="sm">
+            <SelectTrigger aria-label={t('filterCondition').replace('{n}', String(i + 1))} className="min-w-28" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="contains">포함</SelectItem>
-              <SelectItem value="does_not_contain">미포함</SelectItem>
-              <SelectItem value="is_empty">비어 있음</SelectItem>
-              <SelectItem value="is_not_empty">비어 있지 않음</SelectItem>
+              <SelectItem value="contains">{t('contains')}</SelectItem>
+              <SelectItem value="does_not_contain">{t('doesNotContain')}</SelectItem>
+              <SelectItem value="is_empty">{t('isEmpty')}</SelectItem>
+              <SelectItem value="is_not_empty">{t('isNotEmpty')}</SelectItem>
             </SelectContent>
           </Select>
           {relationNeedsValue &&
             (relationOptions?.loading ? (
-              <span className="text-sm text-muted-foreground">관련 페이지 불러오는 중…</span>
+              <span className="text-sm text-muted-foreground">{t('loadingRelatedPages')}</span>
             ) : relationOptions?.error ? (
               <span role="alert" className="text-sm text-destructive">
                 {relationOptions.error}
               </span>
             ) : (
               <Select value={row.value} onValueChange={(value) => onUpdate(i, { value })}>
-                <SelectTrigger aria-label={`필터 ${i + 1} 값`} className="min-w-40 flex-1" size="sm">
-                  <SelectValue placeholder="관련 페이지 선택" />
+                <SelectTrigger aria-label={t('filterValue').replace('{n}', String(i + 1))} className="min-w-40 flex-1" size="sm">
+                  <SelectValue placeholder={t('selectARelatedPage')} />
                 </SelectTrigger>
                 <SelectContent>
                   {(relationOptions?.options ?? []).map((o) => (
                     <SelectItem key={o.id} value={o.id}>
-                      {o.title || '(제목 없음)'}
+                      {o.title || t('untitled')}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -140,7 +142,7 @@ export default function FilterRow({
             value={row.condition}
             onValueChange={(v) => onUpdate(i, { condition: v as FilterRowCondition })}
           >
-            <SelectTrigger aria-label={`필터 ${i + 1} 조건`} className="min-w-20" size="sm">
+            <SelectTrigger aria-label={t('filterCondition').replace('{n}', String(i + 1))} className="min-w-20" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -150,8 +152,8 @@ export default function FilterRow({
           </Select>
           {optionsOfProp(row.property)?.length ? (
             <Select value={row.value} onValueChange={(value) => onUpdate(i, { value })}>
-              <SelectTrigger aria-label={`필터 ${i + 1} 값`} className="min-w-32 flex-1" size="sm">
-                <SelectValue placeholder="값 선택" />
+              <SelectTrigger aria-label={t('filterValue').replace('{n}', String(i + 1))} className="min-w-32 flex-1" size="sm">
+                <SelectValue placeholder={t('selectAValue')} />
               </SelectTrigger>
               <SelectContent>
                 {optionsOfProp(row.property)!.map((o) => (
@@ -164,9 +166,9 @@ export default function FilterRow({
           ) : (
             <div className="min-w-32 flex-1">
               <Input
-                aria-label={`필터 ${i + 1} 값`}
+                aria-label={t('filterValue').replace('{n}', String(i + 1))}
                 value={row.value}
-                placeholder="값 (예: Done)"
+                placeholder={t('valueEGDone')}
                 onChange={(e) => onUpdate(i, { value: e.target.value })}
               />
             </div>
@@ -178,7 +180,7 @@ export default function FilterRow({
         type="button"
         variant="ghost"
         size="sm"
-        aria-label={`필터 ${i + 1} 삭제`}
+        aria-label={t('filterDelete').replace('{n}', String(i + 1))}
         onClick={() => onRemove(i)}
       >
         ✕
@@ -209,17 +211,14 @@ export function FilterSection({
   onAdd,
   onRemove,
 }: SectionProps) {
+  const t = useTranslations()
   return (
     <fieldset>
-      <legend className="text-sm font-medium">필터</legend>
-      <p className="mt-1 mb-4 text-sm text-muted-foreground">
-        조건에 맞는 항목만 캘린더에 표시됩니다 (모든 조건 AND)
-      </p>
+      <legend className="text-sm font-medium">{t('filters')}</legend>
+      <p className="mt-1 mb-4 text-sm text-muted-foreground">{t('onlyMatchingItemsAppearInThe')} </p>
 
       {rows.length === 0 ? (
-        <p className="mb-4 rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
-          필터 없음 — 모든 항목이 표시됩니다
-        </p>
+        <p className="mb-4 rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">{t('noFiltersAllItemsAreShown')} </p>
       ) : (
         <div className="mb-4 space-y-2">
           {rows.map((row, i) => (
@@ -244,9 +243,7 @@ export function FilterSection({
         </div>
       )}
 
-      <Button type="button" variant="default" size="sm" onClick={onAdd}>
-        + 필터 추가
-      </Button>
+      <Button type="button" variant="default" size="sm" onClick={onAdd}>{t('addFilter')} </Button>
     </fieldset>
   )
 }

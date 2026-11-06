@@ -1,25 +1,14 @@
-import type { Metadata } from 'next'
 import './app.css'
-import { LOGO_ICONS } from '@/lib/logo'
+import { LocaleProvider } from '@/lib/i18n-client'
+import { localizedMetadata, requestLocale } from '@/lib/i18n-server'
 import ThemeScript from './ThemeScript'
 import Providers from './Providers'
 
-// 로그인 이후 내부 화면 — @bini59/design 토큰/컴포넌트를 쓴다. 랜딩((site))과 루트 레이아웃을 분리해
-// 디자인 시스템의 전역 CSS(--color-* 초기화, body 스타일)가 공개 랜딩에 새지 않게 한다.
-export const metadata: Metadata = {
-  title: '내 캘린더 · Notion Calendar Bridge',
-  icons: { icon: LOGO_ICONS },
-}
-
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="ko" suppressHydrationWarning>
-      <head>
-        <ThemeScript />
-      </head>
-      <body>
-        <Providers>{children}</Providers>
-      </body>
-    </html>
-  )
+export const generateMetadata = () => localizedMetadata(true)
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const locale = await requestLocale()
+  return <html lang={locale} suppressHydrationWarning>
+    <head><ThemeScript /></head>
+    <body><LocaleProvider locale={locale}><Providers>{children}</Providers></LocaleProvider></body>
+  </html>
 }
