@@ -1,3 +1,4 @@
+import { requestMessages } from '@/lib/i18n-server'
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { deleteCalendar, renameCalendar } from '@/lib/calendars'
@@ -16,12 +17,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json({ error: '이름(name)이 필요합니다' }, { status: 400 })
+    return NextResponse.json({ error: requestMessages(req.headers).calendarNameRequired }, { status: 400 })
   }
 
   const { id } = await params
   const result = renameCalendar(id, auth.userId, parsed.data.name)
-  if (!result) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!result) return NextResponse.json({ error: requestMessages(req.headers).calendarNotFound }, { status: 404 })
 
   return NextResponse.json(result)
 }
@@ -35,7 +36,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { id } = await params
   if (!deleteCalendar(id, auth.userId)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ error: requestMessages(req.headers).calendarNotFound }, { status: 404 })
   }
 
   return new NextResponse(null, { status: 204 })

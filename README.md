@@ -7,9 +7,9 @@ Notion 데이터베이스를 표준 iCal(`.ics`) 구독 피드로 노출하는 *
 
 ## Hosted version
 
-The hosted version connects a Notion database to a read-only iCal subscription. Connect Notion, select a shared database, map its properties, and add the resulting feed URL to your calendar app. Keep the feed URL private: anyone with the link can view its events.
+Use [the hosted version](https://n2c.bini59.dev) to turn a Notion database into a read-only iCal subscription. Connect Notion, select a shared database, map its properties, and add the feed URL to your calendar app. Anyone with the feed URL can view its events, so keep it private.
 
-For support, contact [sksms2347@gmail.com](mailto:sksms2347@gmail.com). To run your own instance instead, follow the self-hosting instructions below.
+For support, contact [sksms2347@gmail.com](mailto:sksms2347@gmail.com). The instructions below cover self-hosting.
 
 ## 미리보기
 

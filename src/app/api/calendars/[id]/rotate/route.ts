@@ -1,3 +1,4 @@
+import { requestMessages } from '@/lib/i18n-server'
 import { NextResponse, type NextRequest } from 'next/server'
 import { rotateFeedToken } from '@/lib/calendars'
 import { requireToken } from '@/lib/require-token'
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params
   const result = rotateFeedToken(id, auth.userId)
-  if (!result) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!result) return NextResponse.json({ error: requestMessages(req.headers).calendarNotFound }, { status: 404 })
 
   return NextResponse.json({ feedUrl: result.feedUrl }, { status: 200 })
 }

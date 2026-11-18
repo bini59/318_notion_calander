@@ -151,7 +151,7 @@ const faqs = [
         </div>
       </header>
 
-      <section className="mx-auto grid w-full max-w-6xl items-center gap-14 px-5 py-16 sm:px-8 sm:py-24 lg:grid-cols-[1fr_0.9fr] lg:py-28">
+      <section className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-14 px-5 py-16 sm:px-8 sm:py-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:py-28">
         <div>
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
             <Sparkles className="size-3.5" aria-hidden="true" /> {t('publicBeta')} </div>

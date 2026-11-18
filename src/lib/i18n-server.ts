@@ -8,6 +8,10 @@ export async function requestLocale() {
   return localeFromAcceptLanguage((await headers()).get('accept-language'))
 }
 
+export function requestMessages(requestHeaders: Headers) {
+  return localeFromAcceptLanguage(requestHeaders.get('accept-language')) === 'ko' ? ko : en
+}
+
 export async function localizedMetadata(app = false) {
   const locale = await requestLocale()
   const messages = locale === 'ko' ? ko : en

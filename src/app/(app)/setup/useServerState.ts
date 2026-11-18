@@ -4,7 +4,7 @@
 // 여기선 조회 캐시 + 변경 후 캐시 갱신만 한다. 반환 형태는 page.tsx가 그대로 쓰도록 유지.
 
 import { useTranslations } from '@/lib/i18n-client'
-import { serverErrorMessage } from './serverError'
+import { serverErrorMessage } from '@/lib/server-error-message'
 import { useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AuthenticatedUser } from '@bini59/design'

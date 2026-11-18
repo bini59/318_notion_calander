@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import en from '@/messages/en.json'
 import ko from '@/messages/ko.json'
-import { serverErrorMessage } from './serverError'
+import { serverErrorMessage } from './server-error-message'
 
 describe('setup server errors', () => {
   it.each([['en', en], ['ko', ko]] as const)('localizes actionable validation errors in %s', (_, messages) => {

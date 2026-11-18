@@ -1,3 +1,4 @@
+import { requestMessages } from '@/lib/i18n-server'
 import { NextResponse, type NextRequest } from 'next/server'
 import { forgetSid } from '@/lib/auth'
 import { getEnv } from '@/lib/env'
@@ -7,8 +8,9 @@ import { deleteUserByAuthId } from '@/lib/users'
 import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
-function failure(error: unknown) {
-  return NextResponse.json({ error: error instanceof MembershipError ? error.message : '처리를 완료하지 못했습니다. 상태를 새로 확인한 뒤 다시 시도해 주세요.' },
+function failure(req: NextRequest, error: unknown) {
+  const messages = requestMessages(req.headers)
+  return NextResponse.json({ error: error instanceof MembershipError ? messages.membershipStatusError : messages.membershipError },
     { status: error instanceof MembershipError ? error.status : 503 })
 }
 export async function GET(req: NextRequest) {
@@ -22,14 +24,14 @@ export async function GET(req: NextRequest) {
     for (const cookie of me.headers.getSetCookie()) res.headers.append('set-cookie', cookie)
     res.headers.set('cache-control', 'no-store')
     return res
-  } catch (error) { return failure(error) }
+  } catch (error) { return failure(req, error) }
 }
 export async function POST(req: NextRequest) {
-  if (!validMembershipCsrf(req)) return NextResponse.json({ error: '요청을 확인할 수 없습니다.' }, { status: 403 })
+  if (!validMembershipCsrf(req)) return NextResponse.json({ error: requestMessages(req.headers).membershipRequestUnverified }, { status: 403 })
   const body = await req.json().catch(() => null)
   if (!body || !['withdraw', 'cleanup', 'rejoin'].includes(body.action) || !Number.isSafeInteger(body.version) || body.version < 0 ||
       Object.keys(body).some(k => !['action', 'version', 'consent'].includes(k)) || body.consent !== true) {
-    return NextResponse.json({ error: '명시적인 확인과 현재 가입 상태가 필요합니다.' }, { status: 400 })
+    return NextResponse.json({ error: requestMessages(req.headers).membershipConsentRequired }, { status: 400 })
   }
   let userId: string | undefined
   let owner: string | null = null
@@ -75,6 +77,6 @@ export async function POST(req: NextRequest) {
     const sid = req.cookies.get('sid')?.value
     if (sid) forgetSid(sid)
     return NextResponse.json({ ok: true })
-  } catch (error) { return failure(error) }
+  } catch (error) { return failure(req, error) }
   finally { if (userId && owner) releaseMembership(userId, owner) }
 }

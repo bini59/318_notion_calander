@@ -20,9 +20,15 @@ export default function Account() {
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/membership')
-      if (!res.ok) throw new Error(res.status === 401 ? t('pleaseSignInOnTheHome') : t('couldNotLoadYourMembershipStatus'))
+      if (res.status === 401) {
+        setError(t('pleaseSignInOnTheHome'))
+        return
+      }
+      if (!res.ok) throw new Error()
       setState(await res.json())
-    } catch (e) { setError(e instanceof TypeError ? t('couldNotLoadYourMembershipStatus') : (e as Error).message) }
+    } catch {
+      setError(t('couldNotLoadYourMembershipStatus'))
+    }
   }, [t])
   useEffect(() => {
     const timer = setTimeout(() => void load(), 0)
@@ -36,10 +42,10 @@ export default function Account() {
     try {
       const token = document.cookie.split('; ').find(v => v.startsWith('csrf='))?.slice(5) ?? ''
       const res = await fetch('/api/membership', { method: 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': decodeURIComponent(token) }, body: JSON.stringify({ action, version: state.version, consent: true }) })
-      if (!res.ok) { throw new Error(t('membershipError')) }
+      if (!res.ok) throw new Error()
       router.replace(action === 'rejoin' ? '/setup' : '/')
-    } catch (e) {
-      setError(e instanceof TypeError ? t('membershipError') : (e as Error).message)
+    } catch {
+      setError(t('membershipError'))
       setConfirmed(false)
       await load()
     } finally { pending.current = false; setBusy(false) }

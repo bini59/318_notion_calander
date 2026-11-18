@@ -475,7 +475,7 @@ function SetupView() {
                   <ConfirmAction title={t('deleteCalendar')} description={t('theSubscriptionLinkWillBePermanently')} action={t('deletePermanently')} onConfirm={() => remove(cal.id)}><Button variant="ghost" size="sm" className="w-full justify-start text-destructive"><Trash2/> {t('delete')}</Button></ConfirmAction>
                 </div></details>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row"><div className="min-w-0 flex-1"><Input aria-label={t('calendarUrl').replace('{name}', cal.name)} readOnly value={cal.feedUrl} className="font-mono text-xs"/></div><Button variant="accent" onClick={() => copyUrl(cal.feedUrl, cal.id)}><Copy/><span aria-live="polite">{copied === cal.id ? t('copied') : t('copyLink')}</span></Button></div>
+              <div className="flex flex-col gap-2 sm:flex-row"><div className="min-w-0 flex-1"><Input aria-label={t('calendarUrl').replace('{name}', () => cal.name)} readOnly value={cal.feedUrl} className="font-mono text-xs"/></div><Button variant="accent" onClick={() => copyUrl(cal.feedUrl, cal.id)}><Copy/><span aria-live="polite">{copied === cal.id ? t('copied') : t('copyLink')}</span></Button></div>
               <details className="mt-3"><summary className="cursor-pointer text-sm font-medium text-primary">{t('howToAddToACalendar')}</summary><div className="mt-3"><SubscriptionGuide/></div></details>
             </li>
           })}

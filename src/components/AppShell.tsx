@@ -1,16 +1,7 @@
 // Adapted from @bini59/design 0.3.0 to localize its built-in labels.
 import { useTranslations } from '@/lib/i18n-client'
+import type { AuthenticatedUser } from '@bini59/design'
 import { cloneElement, isValidElement, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-
-// 321_auth/packages/contracts 재선언 (private 패키지). GET /me 응답과 동일.
-export type Membership = { role: string; status: string; joinedAt: string };
-export type AuthenticatedUser = {
-  userId: string;
-  email: string | null;
-  name: string | null;
-  avatarUrl: string | null;
-  membership: Membership | null;
-};
 
 export type NavItem = { id: string; label: string; icon?: ReactNode; href?: string; children?: NavItem[] };
 
