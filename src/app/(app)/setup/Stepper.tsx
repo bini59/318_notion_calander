@@ -14,7 +14,7 @@ export default function Stepper({ current }: { current: 1 | 2 | 3 }) {
         const active = step === current
         const done = step < current
         return (
-          <li key={label} className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
+          <li key={label} className="flex min-w-0 flex-1 items-center gap-1 max-[359px]:flex-col max-[359px]:text-center sm:gap-2">
             <span
               className={cn(
                 'flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium transition-colors',
@@ -35,7 +35,7 @@ export default function Stepper({ current }: { current: 1 | 2 | 3 }) {
               {label}
             </span>
             {i < STEPS.length - 1 && (
-              <span className="mx-1 h-px flex-1 bg-border" aria-hidden />
+              <span className="mx-1 h-px flex-1 bg-border max-[359px]:hidden" aria-hidden />
             )}
           </li>
         )

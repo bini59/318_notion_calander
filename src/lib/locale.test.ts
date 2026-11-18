@@ -11,6 +11,7 @@ describe('localeFromAcceptLanguage', () => {
     expect(localeFromAcceptLanguage('ko-KR,ko;q=0.9,en;q=0.8')).toBe('ko')
     expect(localeFromAcceptLanguage('en-US,en;q=0.9,ko;q=0.8')).toBe('en')
     expect(localeFromAcceptLanguage('en;q=0.5,ko;q=0.9')).toBe('ko')
+    expect(localeFromAcceptLanguage('ko-KR ; Q=0.9,en;q=0.8')).toBe('ko')
     expect(localeFromAcceptLanguage('ko;q=0,en;q=0.5')).toBe('en')
   })
 })
