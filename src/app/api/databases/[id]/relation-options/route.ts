@@ -1,3 +1,4 @@
+import { requestMessages } from '@/lib/i18n-server'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getDatabaseProperties, queryRelationPages } from '@/lib/notion'
 import { requireToken } from '@/lib/require-token'
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
   const property = req.nextUrl.searchParams.get('property')
   if (!property) {
-    return NextResponse.json({ error: 'property 쿼리 파라미터가 필요합니다' }, { status: 400 })
+    return NextResponse.json({ error: requestMessages(req.headers).relationPropertyRequired }, { status: 400 })
   }
 
   try {
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!prop || prop.type !== 'relation' || !prop.relatedDatabaseId) {
       // 미존재/비relation/관련 DB 미노출 → 400으로 사용자에 표면화(삼키지 않음, 임의 DB 조회 방지).
       return NextResponse.json(
-        { error: `'${property}'은(는) relation 속성이 아닙니다` },
+        { error: requestMessages(req.headers).invalidRelationProperty.replace('{property}', () => property) },
         { status: 400 },
       )
     }
@@ -35,6 +36,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   } catch (error) {
     // Notion 실패(권한/네트워크/rate limit)는 상세 미노출로 502 (databases 라우트 패턴).
     console.error('Notion relation-options failed:', error)
-    return NextResponse.json({ error: 'Failed to query Notion' }, { status: 502 })
+    return NextResponse.json({ error: requestMessages(req.headers).notionQueryFailed }, { status: 502 })
   }
 }

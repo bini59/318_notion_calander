@@ -1,3 +1,4 @@
+import { requestMessages } from '@/lib/i18n-server'
 import { NextResponse, type NextRequest } from 'next/server'
 import { readSession } from './session'
 import { getUserByAuthId } from './users'
@@ -9,11 +10,11 @@ export function requireToken(
   req: NextRequest,
 ): { userId: string; accessToken: string } | NextResponse {
   const authId = readSession(req)
-  if (!authId) return NextResponse.json({ error: 'Not connected' }, { status: 401 })
+  if (!authId) return NextResponse.json({ error: requestMessages(req.headers).notionConnectionRequired }, { status: 401 })
   try {
     const user = getUserByAuthId(authId)
     return { userId: user.id, accessToken: user.accessToken }
   } catch {
-    return NextResponse.json({ error: 'Not connected' }, { status: 401 })
+    return NextResponse.json({ error: requestMessages(req.headers).notionConnectionRequired }, { status: 401 })
   }
 }

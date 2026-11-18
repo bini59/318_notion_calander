@@ -73,10 +73,10 @@ export function autoDetectMapping(properties: NotionProperty[]): Partial<Calenda
 // 신뢰경계: 클라이언트가 보낸 매핑을 그대로 믿지 않는다. 백엔드가 Notion 속성을 재조회한
 // 뒤 이 함수로 "매핑된 이름이 실제 존재 + 타입이 맞는지" 검증한다.
 // 위반 시 사유 문자열(라우트가 400으로 변환), 통과 시 null.
-export function validateMappingAgainstProperties(
+export function mappingValidationIssue(
   mapping: CalendarMapping,
   properties: NotionProperty[],
-): string | null {
+): MappingIssue | null {
   const typeOf = (name: string): string | undefined =>
     properties.find((p) => p.name === name)?.type
 
@@ -91,9 +91,9 @@ export function validateMappingAgainstProperties(
     const name = mapping[field]
     if (!name) continue // end는 선택
     const actual = typeOf(name)
-    if (actual === undefined) return `매핑된 속성 '${name}'이(가) DB에 존재하지 않습니다`
+    if (actual === undefined) return { code: 'MAPPING_PROPERTY_MISSING', property: name }
     if (actual !== expected) {
-      return `속성 '${name}'의 타입은 '${expected}'이어야 합니다 (현재: '${actual}')`
+      return { code: 'MAPPING_PROPERTY_TYPE', property: name, expected, actual }
     }
   }
 
@@ -104,7 +104,7 @@ export function validateMappingAgainstProperties(
     const name = mapping[field]
     if (!name) continue
     if (typeOf(name) === undefined) {
-      return `매핑된 속성 '${name}'이(가) DB에 존재하지 않습니다`
+      return { code: 'MAPPING_PROPERTY_MISSING', property: name }
     }
   }
 
@@ -114,11 +114,24 @@ export function validateMappingAgainstProperties(
   // id면 Notion이 빈 결과 반환). is_empty/is_not_empty는 filterSchema refine이 value 없이도 통과시킴.
   for (const f of mapping.filters ?? []) {
     const actual = typeOf(f.property)
-    if (actual === undefined) return `필터 속성 '${f.property}'이(가) DB에 존재하지 않습니다`
+    if (actual === undefined) return { code: 'FILTER_PROPERTY_MISSING', property: f.property }
     if (actual !== f.type) {
-      return `필터 속성 '${f.property}'의 타입은 '${f.type}'이어야 합니다 (현재: '${actual}')`
+      return { code: 'FILTER_PROPERTY_TYPE', property: f.property, expected: f.type, actual }
     }
   }
 
   return null
+}
+
+export type MappingIssue =
+  | { code: 'MAPPING_PROPERTY_MISSING' | 'FILTER_PROPERTY_MISSING'; property: string }
+  | { code: 'MAPPING_PROPERTY_TYPE' | 'FILTER_PROPERTY_TYPE'; property: string; expected: string; actual: string }
+
+// Keep the existing validation API for callers that use its diagnostic text.
+export function validateMappingAgainstProperties(mapping: CalendarMapping, properties: NotionProperty[]): string | null {
+  const issue = mappingValidationIssue(mapping, properties)
+  if (!issue) return null
+  const prefix = issue.code.startsWith('FILTER') ? '필터 속성' : issue.code === 'MAPPING_PROPERTY_MISSING' ? '매핑된 속성' : '속성'
+  if ('expected' in issue) return `${prefix} '${issue.property}'의 타입은 '${issue.expected}'이어야 합니다 (현재: '${issue.actual}')`
+  return `${prefix} '${issue.property}'이(가) DB에 존재하지 않습니다`
 }

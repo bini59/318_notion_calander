@@ -19,7 +19,7 @@ function AlertDialogContent({ className, ...props }: React.ComponentProps<typeof
 
 const AlertDialogTitle = ({ className, ...props }: React.ComponentProps<typeof Primitive.Title>) => <Primitive.Title className={cn('text-lg font-semibold', className)} {...props} />
 const AlertDialogDescription = ({ className, ...props }: React.ComponentProps<typeof Primitive.Description>) => <Primitive.Description className={cn('mt-2 text-sm text-muted-foreground', className)} {...props} />
-const AlertDialogCancel = ({ children = '취소', ...props }: React.ComponentProps<typeof Primitive.Cancel>) => <Primitive.Cancel asChild {...props}><Button variant="outline">{children}</Button></Primitive.Cancel>
+const AlertDialogCancel = ({ children, ...props }: React.ComponentProps<typeof Primitive.Cancel>) => <Primitive.Cancel asChild {...props}><Button variant="outline">{children}</Button></Primitive.Cancel>
 const AlertDialogAction = ({ children, ...props }: React.ComponentProps<typeof Primitive.Action>) => <Primitive.Action asChild {...props}><Button variant="destructive">{children}</Button></Primitive.Action>
 
 export { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogAction }

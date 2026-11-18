@@ -6,7 +6,7 @@ export type Membership = {
   version: number; cleanupId: string | null; cleanupPending: boolean
 }
 export class MembershipError extends Error {
-  constructor(public status: number) { super('가입 상태를 확인하지 못했습니다. 상태를 새로 확인한 뒤 다시 시도해 주세요.') }
+  constructor(public status: number) { super(`Membership request failed (${status})`) }
 }
 export async function membershipRequest(req: NextRequest, path = 'identity', body?: object): Promise<Membership> {
   const env = getEnv()

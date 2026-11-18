@@ -1,3 +1,4 @@
+import { requestMessages } from '@/lib/i18n-server'
 import { NextResponse, type NextRequest } from 'next/server'
 import { SID_COOKIE, verifySid, type Verdict } from '@/lib/auth'
 import { getEnv } from '@/lib/env'
@@ -22,7 +23,7 @@ export async function proxy(req: NextRequest) {
       verdict = await verifySid(sid)
     } catch (error) {
       console.error('auth verify failed:', error)
-      return new NextResponse('auth unavailable', { status: 503 })
+      return new NextResponse(requestMessages(req.headers).authUnavailable, { status: 503 })
     }
   }
 

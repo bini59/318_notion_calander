@@ -29,10 +29,10 @@ beforeEach(() => {
   listCalendarsByUser.mockReset()
 })
 
-function req(body: unknown): NextRequest {
+function req(body: unknown, language = 'en-US'): NextRequest {
   return new NextRequest('http://localhost:3000/api/calendars', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'accept-language': language },
     body: JSON.stringify(body),
   })
 }
@@ -82,6 +82,10 @@ describe('POST /api/calendars', () => {
     // 클라가 start를 rich_text 속성으로 위조 → 서버 재검증에서 거부.
     const res = await POST(req({ databaseId: 'db1', mapping: { title: 'Name', start: 'Notes' } }))
     expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      code: 'MAPPING_PROPERTY_TYPE', property: 'Notes', expected: 'date', actual: 'rich_text',
+      error: 'The mapped property “Notes” must be type date (currently rich_text). Reload the database properties and update the mapping.',
+    })
     expect(createCalendar).not.toHaveBeenCalled()
   })
 
@@ -89,8 +93,12 @@ describe('POST /api/calendars', () => {
     readSession.mockReturnValue('user-1')
     getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     getDatabaseProperties.mockResolvedValue(dbProps)
-    const res = await POST(req({ databaseId: 'db1', mapping: { title: 'Name', start: 'Ghost' } }))
+    const res = await POST(req({ databaseId: 'db1', mapping: { title: 'Name', start: 'Ghost' } }, 'ko-KR'))
     expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      code: 'MAPPING_PROPERTY_MISSING', property: 'Ghost',
+      error: '매핑된 속성 “Ghost”이(가) 더 이상 존재하지 않습니다. 데이터베이스 속성을 다시 불러와 다른 속성을 선택해 주세요.',
+    })
     expect(createCalendar).not.toHaveBeenCalled()
   })
 
