@@ -1,3 +1,4 @@
+import { requestMessages } from '@/lib/i18n-server'
 import { NextResponse, type NextRequest } from 'next/server'
 import { searchDatabases } from '@/lib/notion'
 import { requireToken } from '@/lib/require-token'
@@ -16,6 +17,6 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     // Notion 실패(권한/네트워크/rate limit)는 상세 미노출로 502 (콜백 라우트 패턴).
     console.error('Notion database search failed:', error)
-    return NextResponse.json({ error: 'Failed to query Notion' }, { status: 502 })
+    return NextResponse.json({ error: requestMessages(req.headers).notionQueryFailed }, { status: 502 })
   }
 }
