@@ -18,7 +18,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
   const property = req.nextUrl.searchParams.get('property')
   if (!property) {
-    return NextResponse.json({ error: requestMessages(req.headers).relationPropertyRequired }, { status: 400 })
+    return NextResponse.json(
+      { error: requestMessages(req.headers).relationPropertyRequired, code: 'RELATION_PROPERTY_REQUIRED' },
+      { status: 400 },
+    )
   }
 
   try {
@@ -27,7 +30,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!prop || prop.type !== 'relation' || !prop.relatedDatabaseId) {
       // 미존재/비relation/관련 DB 미노출 → 400으로 사용자에 표면화(삼키지 않음, 임의 DB 조회 방지).
       return NextResponse.json(
-        { error: requestMessages(req.headers).invalidRelationProperty.replace('{property}', () => property) },
+        {
+          error: requestMessages(req.headers).invalidRelationProperty.replace('{property}', () => property),
+          code: 'INVALID_RELATION_PROPERTY',
+          property,
+        },
         { status: 400 },
       )
     }

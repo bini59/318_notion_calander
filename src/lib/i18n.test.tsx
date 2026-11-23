@@ -26,5 +26,7 @@ describe('localized UI', () => {
     expect(await localizedMetadata()).toMatchObject({ title: ko.siteTitle, description: ko.metadataDescription, openGraph: { locale: 'ko_KR', title: ko.siteTitle } })
     vi.mocked(headers).mockResolvedValue(new Headers({ 'accept-language': 'en-US,en;q=0.9' }) as never)
     expect(await localizedMetadata(true)).toMatchObject({ title: en.appTitle, description: en.metadataDescription, openGraph: { locale: 'en_US', title: en.appTitle } })
+    vi.mocked(headers).mockResolvedValue(new Headers({ 'accept-language': 'fr-FR,fr;q=0.9,ko;q=0.8' }) as never)
+    expect(await localizedMetadata()).toMatchObject({ title: en.siteTitle, description: en.metadataDescription, openGraph: { locale: 'en_US', title: en.siteTitle } })
   })
 })

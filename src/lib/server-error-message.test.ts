@@ -13,10 +13,14 @@ describe('setup server errors', () => {
     expect(message).toContain('select')
     expect(message).toBe(messages.filterPropertyType.replace('{property}', 'Status').replace('{expected}', 'status').replace('{actual}', 'select'))
     expect(serverErrorMessage({ code: 'DATE_PROPERTY_REQUIRED' }, 'fallback', t)).toBe(messages.datePropertyRequired)
+    expect(serverErrorMessage({ code: 'RELATION_PROPERTY_REQUIRED' }, 'fallback', t)).toBe(messages.relationPropertyRequired)
+    expect(serverErrorMessage({ code: 'INVALID_RELATION_PROPERTY', property: 'Project $&' }, 'fallback', t))
+      .toBe(messages.invalidRelationProperty.replace('{property}', () => 'Project $&'))
   })
   it('uses the fallback for unknown or malformed errors without exposing server text', () => {
     const t = (key: keyof typeof en) => en[key]
     expect(serverErrorMessage({ error: 'secret', code: 'UNKNOWN' }, 'fallback', t)).toBe('fallback')
     expect(serverErrorMessage({ code: 'MAPPING_PROPERTY_TYPE', property: 'Due' }, 'fallback', t)).toBe('fallback')
+    expect(serverErrorMessage({ code: 'INVALID_RELATION_PROPERTY', error: 'secret' }, 'fallback', t)).toBe('fallback')
   })
 })

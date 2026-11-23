@@ -8,11 +8,13 @@ export function serverErrorMessage(data: unknown, fallback: string, t: Translate
   const issue = data as Record<string, unknown>
   if (issue.code === 'INVALID_MAPPING') return t('invalidMapping')
   if (issue.code === 'DATE_PROPERTY_REQUIRED') return t('datePropertyRequired')
+  if (issue.code === 'RELATION_PROPERTY_REQUIRED') return t('relationPropertyRequired')
   const keys = {
     MAPPING_PROPERTY_MISSING: 'mappingPropertyMissing',
     FILTER_PROPERTY_MISSING: 'filterPropertyMissing',
     MAPPING_PROPERTY_TYPE: 'mappingPropertyType',
     FILTER_PROPERTY_TYPE: 'filterPropertyType',
+    INVALID_RELATION_PROPERTY: 'invalidRelationProperty',
   } as const
   if (typeof issue.code !== 'string' || !Object.hasOwn(keys, issue.code) || typeof issue.property !== 'string') return fallback
   const key = keys[issue.code as keyof typeof keys]

@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import en from '@/messages/en.json'
+import ko from '@/messages/ko.json'
 
 const readSession = vi.fn()
 const getUserByAuthId = vi.fn()
@@ -24,9 +26,10 @@ beforeEach(() => {
   queryRelationPages.mockReset()
 })
 
-const req = (property?: string) =>
+const req = (property?: string, language = 'en') =>
   new NextRequest(
-    `http://localhost:3000/api/databases/db1/relation-options${property ? `?property=${property}` : ''}`,
+    `http://localhost:3000/api/databases/db1/relation-options${property ? `?property=${encodeURIComponent(property)}` : ''}`,
+    { headers: { 'accept-language': language } },
   )
 const ctx = { params: Promise.resolve({ id: 'db1' }) }
 
@@ -43,6 +46,7 @@ describe('GET /api/databases/[id]/relation-options', () => {
     getUserByAuthId.mockReturnValue({ id: 'user-1', accessToken: 'tok' })
     const res = await GET(req(), ctx)
     expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: en.relationPropertyRequired, code: 'RELATION_PROPERTY_REQUIRED' })
     expect(getDatabaseProperties).not.toHaveBeenCalled()
   })
 
@@ -70,6 +74,11 @@ describe('GET /api/databases/[id]/relation-options', () => {
     getDatabaseProperties.mockResolvedValue([{ name: 'Place', type: 'select', options: [{ name: 'HQ' }] }])
     const res = await GET(req('Place'), ctx)
     expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: en.invalidRelationProperty.replace('{property}', 'Place'),
+      code: 'INVALID_RELATION_PROPERTY',
+      property: 'Place',
+    })
     expect(queryRelationPages).not.toHaveBeenCalled()
   })
 
@@ -79,6 +88,20 @@ describe('GET /api/databases/[id]/relation-options', () => {
     getDatabaseProperties.mockResolvedValue([{ name: 'When', type: 'date' }])
     const res = await GET(req('Ghost'), ctx)
     expect(res.status).toBe(400)
+    expect(queryRelationPages).not.toHaveBeenCalled()
+  })
+
+  it('identifies a relation whose target database is unavailable', async () => {
+    readSession.mockReturnValue('user-1')
+    const property = 'Project $&'
+    getDatabaseProperties.mockResolvedValue([{ name: property, type: 'relation' }])
+    const res = await GET(req(property, 'ko-KR'), ctx)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: ko.invalidRelationProperty.replace('{property}', () => property),
+      code: 'INVALID_RELATION_PROPERTY',
+      property,
+    })
     expect(queryRelationPages).not.toHaveBeenCalled()
   })
 
